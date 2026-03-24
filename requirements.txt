@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+streamlit
+sqlalchemy
+groq
+httpx
+python-dotenv
+pydantic
+pydantic-settings   
