@@ -28,6 +28,9 @@ from datetime import datetime
 from collections import Counter
 from groq import Groq
 
+# ── Hardcoded API key — no .env or sidebar input needed
+os.environ["GROQ_API_KEY"] = "REMOVED_SECRET"
+
 # ── Init DB once
 services.init_db()
 
@@ -432,6 +435,59 @@ html, body, [class*="css"] {
     border-top: 1px solid var(--border);
     text-transform: uppercase;
 }
+
+/* Grade badge */
+.grade-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px; height: 64px;
+    border-radius: 14px;
+    font-family: 'Syne', sans-serif;
+    font-size: 2.2rem;
+    font-weight: 800;
+    border: 2px solid currentColor;
+}
+
+/* Sentence bias row */
+.sent-row {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    padding: 0.55rem 0.9rem;
+    border-radius: 8px;
+    margin-bottom: 0.4rem;
+    border-left: 3px solid transparent;
+}
+.sent-row.flagged {
+    background: rgba(255,77,77,0.07);
+    border-left-color: var(--red);
+    color: var(--text-primary);
+}
+.sent-row.clean {
+    background: rgba(255,255,255,0.02);
+    border-left-color: rgba(255,255,255,0.05);
+    color: var(--text-secondary);
+}
+.sent-dims {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 1px;
+    color: #ff9090;
+    margin-top: 2px;
+}
+
+/* Legal ref card */
+.legal-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(77,159,255,0.2);
+    border-left: 3px solid var(--blue);
+    border-radius: 10px;
+    padding: 0.7rem 1rem;
+    margin-bottom: 0.4rem;
+}
+.legal-dim   { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 2px; color: var(--blue); text-transform: uppercase; }
+.legal-text  { font-family: 'DM Sans', sans-serif; font-size: 0.82rem; color: var(--text-secondary); margin-top: 3px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -483,21 +539,13 @@ BIAS_DIMS   = ["Gender", "Age", "Racial", "Geographic", "Socioeconomic", "Langua
 # ─────────────────────────────────────────────
 
 def get_api_key() -> str:
-    """Return key from session state (user-entered) or .env."""
-    if st.session_state.get("groq_api_key"):
-        return st.session_state["groq_api_key"]
     return os.getenv("GROQ_API_KEY", "")
 
-
 def set_env_key():
-    """Push the sidebar key into env so services.py can use it."""
-    key = get_api_key()
-    if key:
-        os.environ["GROQ_API_KEY"] = key
-
+    pass  # key is already set at module level
 
 def check_groq_key() -> bool:
-    return bool(get_api_key())
+    return bool(os.getenv("GROQ_API_KEY", ""))
 
 
 def run_analysis(text: str, dtype: str) -> tuple:
@@ -586,6 +634,87 @@ def severity_badge(conf: float, bias_found: bool) -> str:
     if conf >= 0.45:
         return '<span class="severity-medium">MEDIUM SEVERITY</span>'
     return '<span class="severity-low">LOW SEVERITY</span>'
+
+
+LEGAL_REFS = {
+    "Gender":        "Equality Act 2010 (UK) · Title VII Civil Rights Act (US) · EU Equal Treatment Directive 2006/54/EC",
+    "Age":           "Age Discrimination in Employment Act (US) · Equality Act 2010 s.5 (UK) · EU Directive 2000/78/EC",
+    "Racial":        "Race Relations Act / Equality Act 2010 (UK) · Civil Rights Act Title VI (US) · ICERD",
+    "Geographic":    "Fair Housing Act (US) · EU Anti-Discrimination Directives · ECHR Article 14",
+    "Socioeconomic": "Equality Act 2010 s.1 (UK) · ECHR Protocol 12 · ILO Discrimination Convention 111",
+    "Language":      "Title VI Civil Rights Act (US) · EU Charter Article 21 · ECHR Article 14",
+    "Insurance":     "ACA Section 1557 (US) · Equality Act 2010 (UK) · EU Gender Goods & Services Directive",
+}
+
+FAIRNESS_GRADES = [
+    (0.0,  0.15, "A", "#4dffb0", "Likely fair — no strong discriminatory signals detected."),
+    (0.15, 0.35, "B", "#80ffd0", "Mostly fair — minor indicators worth monitoring."),
+    (0.35, 0.55, "C", "#ffb84d", "Questionable — moderate bias signals present."),
+    (0.55, 0.75, "D", "#ff9090", "Likely biased — significant discriminatory factors found."),
+    (0.75, 1.01, "F", "#ff4d4d", "Highly biased — strong discriminatory patterns detected."),
+]
+
+def fairness_grade(confidence: float, bias_found: bool) -> tuple:
+    """Returns (grade, color, description)."""
+    if not bias_found:
+        return "A", "#4dffb0", "Likely fair — no strong discriminatory signals detected."
+    for lo, hi, grade, color, desc in FAIRNESS_GRADES:
+        if lo <= confidence < hi:
+            return grade, color, desc
+    return "F", "#ff4d4d", "Highly biased — strong discriminatory patterns detected."
+
+
+def get_legal_refs(bias_types: list) -> list:
+    """Return relevant legal references for detected bias types."""
+    refs = []
+    for bt in bias_types:
+        for dim, ref in LEGAL_REFS.items():
+            if dim.lower() in bt.lower() and ref not in refs:
+                refs.append((dim, ref))
+    return refs
+
+
+def extract_bias_sentences(text: str, bias_types: list) -> list:
+    """Split text into sentences and flag which ones contain bias keywords."""
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    flagged = []
+    for sent in sentences:
+        matched = []
+        for bt in bias_types:
+            for dim, pat in BIAS_KEYWORDS.items():
+                if dim.lower() in bt.lower():
+                    if re.search(pat, sent, re.IGNORECASE):
+                        matched.append(dim)
+        flagged.append({"sentence": sent, "bias_dims": list(set(matched))})
+    return flagged
+
+
+def generate_rebuttal_points(report: dict, decision_text: str) -> str:
+    """Generate bullet-point rebuttal arguments via Groq."""
+    set_env_key()
+    client = services.get_groq_client()
+    bias_types  = ", ".join(report.get("bias_types", [])) or "undisclosed"
+    affected    = report.get("affected_characteristic", "protected characteristic")
+    explanation = report.get("explanation", "")
+    system = (
+        "You are an expert in employment law and discrimination cases. "
+        "Generate a concise numbered list of strong rebuttal arguments the applicant "
+        "can use when challenging the decision. Be specific and legally grounded. "
+        "Return plain text, numbered 1-5, no markdown."
+    )
+    prompt = (
+        f"Decision text: {decision_text}\n"
+        f"Bias types found: {bias_types}\n"
+        f"Characteristic affected: {affected}\n"
+        f"What went wrong: {explanation}\n\n"
+        "Write 5 specific rebuttal points the person can raise in an appeal or complaint."
+    )
+    resp = client.chat.completions.create(
+        model="llama-3.3-70b-versatile", max_tokens=600,
+        messages=[{"role": "system", "content": system},
+                  {"role": "user", "content": prompt}],
+    )
+    return resp.choices[0].message.content.strip()
 
 
 # ─── Charts ───────────────────────────────────
@@ -846,26 +975,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    # ── API Key (V3: no server needed, just paste key here)
-    env_key = os.getenv("GROQ_API_KEY", "")
-    if env_key:
-        st.markdown('<div class="status-pill-ok">● GROQ KEY LOADED</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="status-pill-warn">● NO GROQ KEY IN .ENV</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div style="font-family:DM Mono,monospace; font-size:0.62rem; letter-spacing:1.5px; '
-            'text-transform:uppercase; color:#4a5268; margin: 0.6rem 0 0.3rem;">Enter API Key</div>',
-            unsafe_allow_html=True,
-        )
-        key_input = st.text_input(
-            "Groq API Key", label_visibility="collapsed",
-            placeholder="gsk_...",
-            type="password", key="groq_key_input",
-        )
-        if key_input:
-            st.session_state["groq_api_key"] = key_input
-            st.success("✓ Key saved for this session")
-
     st.markdown("---")
     st.markdown(
         '<div style="font-family:DM Mono,monospace; font-size:0.6rem; letter-spacing:2.5px; '
@@ -1061,6 +1170,58 @@ with tab_analyse:
                         unsafe_allow_html=True,
                     )
 
+                # ── Fairness Grade
+                grade, gcolor, gdesc = fairness_grade(confidence, bias_found)
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown('<div class="sec-label">🎓 Fairness Grade</div>', unsafe_allow_html=True)
+                gc1, gc2 = st.columns([1, 5])
+                with gc1:
+                    st.markdown(
+                        f'<div class="grade-badge" style="color:{gcolor}; border-color:{gcolor};">'
+                        f'{grade}</div>',
+                        unsafe_allow_html=True,
+                    )
+                with gc2:
+                    st.markdown(
+                        f'<div style="padding-top:0.6rem; font-family:DM Sans,sans-serif; '
+                        f'font-size:0.92rem; color:{gcolor}; font-weight:600;">{gdesc}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # ── Sentence-level Bias Breakdown
+                if bias_types and decision_text.strip():
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown('<div class="sec-label">🔬 Sentence-Level Bias Breakdown</div>',
+                                unsafe_allow_html=True)
+                    flagged_sents = extract_bias_sentences(decision_text, bias_types)
+                    for item in flagged_sents:
+                        if item["bias_dims"]:
+                            dims_str = " · ".join(item["bias_dims"]).upper()
+                            st.markdown(
+                                f'<div class="sent-row flagged">{item["sentence"]}'
+                                f'<div class="sent-dims">⚑ {dims_str}</div></div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                f'<div class="sent-row clean">{item["sentence"]}</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                # ── Legal References
+                legal_refs = get_legal_refs(bias_types)
+                if legal_refs:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown('<div class="sec-label">⚖️ Relevant Laws & Protections</div>',
+                                unsafe_allow_html=True)
+                    for dim, ref in legal_refs:
+                        st.markdown(
+                            f'<div class="legal-card">'
+                            f'<div class="legal-dim">{dim} Bias</div>'
+                            f'<div class="legal-text">{ref}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+
                 # ── Recommendations
                 if recs:
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -1071,6 +1232,30 @@ with tab_analyse:
                             f'<div class="rec-item">'
                             f'<div class="rec-num">{i}</div>'
                             f'<div class="rec-text">{rec}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+
+                # ── Rebuttal Points Generator
+                if bias_found:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown('<div class="sec-label">🗣️ Rebuttal Points Generator</div>',
+                                unsafe_allow_html=True)
+                    st.markdown(
+                        '<div style="font-family:DM Sans,sans-serif; font-size:0.85rem; '
+                        'color:#8892aa; margin-bottom:0.8rem;">AI-generated arguments you can '
+                        'use when challenging this decision verbally or in writing.</div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("🗣️ Generate Rebuttal Points", key="rebuttal_btn"):
+                        with st.spinner("Building your arguments..."):
+                            try:
+                                rb = generate_rebuttal_points(report, decision_text)
+                                st.session_state["rebuttal_points"] = rb
+                            except Exception as e:
+                                st.error(f"❌ {e}")
+                    if st.session_state.get("rebuttal_points"):
+                        st.markdown(
+                            f'<div class="appeal-box">{st.session_state["rebuttal_points"]}</div>',
                             unsafe_allow_html=True,
                         )
 
