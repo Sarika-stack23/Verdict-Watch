@@ -11,11 +11,11 @@ Paste any rejection letter, loan denial, medical triage result, or university re
 ```
 Your decision text
       ↓
-Claude Call 1 → Extracts criteria & factors used
+Groq Call 1 → Extracts criteria & factors used
       ↓
-Claude Call 2 → Detects hidden bias in those factors
+Groq Call 2 → Detects hidden bias in those factors
       ↓
-Claude Call 3 → Generates the fair outcome + next steps
+Groq Call 3 → Generates the fair outcome + next steps
       ↓
 Full report shown in UI
 ```
@@ -30,9 +30,9 @@ python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# 2. Add your Anthropic API key
+# 2. Add your Groq API key
 cp .env.example .env
-# Edit .env — add your ANTHROPIC_API_KEY
+# Edit .env — add your GROQ_API_KEY
 
 # 3. Start the API (Terminal 1)
 uvicorn api:app --reload
@@ -50,7 +50,7 @@ Open http://localhost:8501 in your browser.
 | File | Purpose |
 |------|---------|
 | `requirements.txt` | Python dependencies |
-| `services.py` | DB models + 3-chain Claude pipeline |
+| `services.py` | DB models + 3-chain Groq pipeline |
 | `api.py` | FastAPI REST endpoints |
 | `streamlit_app.py` | Full Streamlit UI |
 | `.env.example` | Environment variable template |
@@ -85,7 +85,7 @@ Open http://localhost:8501 in your browser.
 - **FastAPI** — REST API
 - **Streamlit** — Frontend UI
 - **SQLAlchemy + SQLite** — Zero-config database
-- **Anthropic Claude Haiku** — AI pipeline (3 chained calls)
+- **Groq (Llama 3.3 70B)** — AI pipeline (3 chained calls)
 - **httpx** — Async HTTP
 
 ---

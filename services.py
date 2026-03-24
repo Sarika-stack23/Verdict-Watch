@@ -1,6 +1,6 @@
 """
 services.py — Verdict Watch
-Database models + all 3 Claude API calls + full pipeline
+Database models + all 3 Groq API calls + full pipeline
 """
 
 import os
@@ -56,13 +56,9 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
 
+# ✅ FIXED: Removed pointless try/except that could never catch anything
 def get_db() -> Session:
-    db = SessionLocal()
-    try:
-        return db
-    except Exception:
-        db.close()
-        raise
+    return SessionLocal()
 
 
 # ─────────────────────────────────────────────
@@ -103,7 +99,7 @@ def call_groq(prompt: str, system: str) -> dict:
 
 
 # ─────────────────────────────────────────────
-# CLAUDE CALL 1 — EXTRACT FACTORS
+# GROQ CALL 1 — EXTRACT FACTORS
 # ─────────────────────────────────────────────
 
 def extract_factors(decision_text: str, decision_type: str) -> dict:
@@ -130,7 +126,7 @@ def extract_factors(decision_text: str, decision_type: str) -> dict:
 
 
 # ─────────────────────────────────────────────
-# CLAUDE CALL 2 — DETECT BIAS
+# GROQ CALL 2 — DETECT BIAS
 # ─────────────────────────────────────────────
 
 def detect_bias(extracted_factors: dict) -> dict:
@@ -156,7 +152,7 @@ def detect_bias(extracted_factors: dict) -> dict:
 
 
 # ─────────────────────────────────────────────
-# CLAUDE CALL 3 — GENERATE FAIR OUTCOME
+# GROQ CALL 3 — GENERATE FAIR OUTCOME
 # ─────────────────────────────────────────────
 
 def generate_fair_outcome(extracted: dict, bias_result: dict) -> dict:
@@ -192,7 +188,7 @@ def generate_fair_outcome(extracted: dict, bias_result: dict) -> dict:
 
 def run_full_pipeline(decision_text: str, decision_type: str) -> dict:
     """
-    Runs the 3-call Claude pipeline, saves to DB, returns full report dict.
+    Runs the 3-call Groq pipeline, saves to DB, returns full report dict.
     """
     db: Session = get_db()
     try:

@@ -58,7 +58,7 @@ class AnalyseResponse(BaseModel):
 @app.post("/api/analyse", response_model=AnalyseResponse, tags=["Analysis"])
 def analyse_decision(payload: AnalyseRequest):
     """
-    Run the full 3-call Claude pipeline on a pasted decision text.
+    Run the full 3-call Groq pipeline on a pasted decision text.
     Returns the complete bias report.
     """
     if not payload.decision_text.strip():
@@ -101,9 +101,9 @@ def get_report(report_id: str):
 def health_check():
     """Check API and database status."""
     try:
-        # Ping the DB by running a lightweight query
+        # ✅ FIXED: Use SQLAlchemy ORM query instead of raw .execute()
         db = services.get_db()
-        db.execute(services.Analysis.__table__.select().limit(1))
+        db.query(services.Analysis).limit(1).all()
         db.close()
         db_status = "ok"
     except Exception as e:
