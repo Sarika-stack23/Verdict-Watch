@@ -6,4 +6,6 @@ groq
 httpx
 python-dotenv
 pydantic
-pydantic-settings   
+pydantic-settings
+plotly
+pandas
