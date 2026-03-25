@@ -27,9 +27,10 @@ import json
 from datetime import datetime
 from collections import Counter
 from groq import Groq
+from dotenv import load_dotenv
 
-# ── Hardcoded API key — no .env or sidebar input needed
-os.environ["GROQ_API_KEY"] = "REMOVED_SECRET"
+# ── Load environment variables from .env file
+load_dotenv()
 
 # ── Init DB once
 services.init_db()
@@ -542,7 +543,7 @@ def get_api_key() -> str:
     return os.getenv("GROQ_API_KEY", "")
 
 def set_env_key():
-    pass  # key is already set at module level
+    pass  # key is loaded from .env via load_dotenv()
 
 def check_groq_key() -> bool:
     return bool(os.getenv("GROQ_API_KEY", ""))
@@ -550,7 +551,6 @@ def check_groq_key() -> bool:
 
 def run_analysis(text: str, dtype: str) -> tuple:
     """Run full pipeline — returns (report_dict, error_str | None)."""
-    set_env_key()
     try:
         report = services.run_full_pipeline(decision_text=text, decision_type=dtype)
         return report, None
@@ -569,7 +569,6 @@ def get_all_reports() -> list:
 
 def generate_appeal_letter(report: dict, decision_text: str, decision_type: str) -> str:
     """V3: Generate a formal appeal letter via Groq."""
-    set_env_key()
     client = services.get_groq_client()
     bias_types = ", ".join(report.get("bias_types", [])) or "undisclosed bias"
     affected   = report.get("affected_characteristic", "a protected characteristic")
@@ -691,7 +690,6 @@ def extract_bias_sentences(text: str, bias_types: list) -> list:
 
 def generate_rebuttal_points(report: dict, decision_text: str) -> str:
     """Generate bullet-point rebuttal arguments via Groq."""
-    set_env_key()
     client = services.get_groq_client()
     bias_types  = ", ".join(report.get("bias_types", [])) or "undisclosed"
     affected    = report.get("affected_characteristic", "protected characteristic")
@@ -975,6 +973,25 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    # ── API Key status indicator
+    st.markdown("---")
+    if check_groq_key():
+        st.markdown(
+            '<div class="status-pill-ok">● GROQ KEY LOADED</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="status-pill-err">● NO GROQ KEY FOUND</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div style="font-family:DM Sans,sans-serif; font-size:0.78rem; color:#ff9090; '
+            'margin-top:0.5rem;">Add <code>GROQ_API_KEY=your_key</code> to a <code>.env</code> '
+            'file in the project root, then restart the app.</div>',
+            unsafe_allow_html=True,
+        )
+
     st.markdown("---")
     st.markdown(
         '<div style="font-family:DM Mono,monospace; font-size:0.6rem; letter-spacing:2.5px; '
@@ -1076,7 +1093,7 @@ with tab_analyse:
         if not decision_text.strip():
             st.warning("⚠️ Please paste a decision text first.")
         elif not check_groq_key():
-            st.error("❌ No Groq API key. Add it in the sidebar or your .env file.")
+            st.error("❌ No Groq API key found. Add GROQ_API_KEY to your .env file and restart.")
         else:
             st.markdown('<hr class="divider">', unsafe_allow_html=True)
             with st.spinner("Running 3-step AI analysis..."):
@@ -1544,7 +1561,7 @@ with tab_compare:
         if not cmp_text1.strip() or not cmp_text2.strip():
             st.warning("⚠️ Paste text for both Decision A and B.")
         elif not check_groq_key():
-            st.error("❌ No Groq API key.")
+            st.error("❌ No Groq API key found. Add GROQ_API_KEY to your .env file and restart.")
         else:
             with st.spinner("Analysing both decisions..."):
                 r1, e1 = run_analysis(cmp_text1, cmp_type1)
@@ -1658,7 +1675,7 @@ with tab_batch:
         if not raw_blocks:
             st.warning("⚠️ No decisions found. Separate them with --- on its own line.")
         elif not check_groq_key():
-            st.error("❌ No Groq API key.")
+            st.error("❌ No Groq API key found. Add GROQ_API_KEY to your .env file and restart.")
         elif len(raw_blocks) > 10:
             st.warning("⚠️ Batch limit is 10 decisions at once.")
         else:
@@ -1822,7 +1839,7 @@ with tab_about:
                     unsafe_allow_html=True)
         v3_feats = [
             ("🔌", "Zero-Server Architecture", "No uvicorn needed — runs standalone"),
-            ("🔑", "Inline API Key Input",      "Paste Groq key in sidebar, no .env required"),
+            ("🔑", "Secure .env Key Loading",  "API key loaded from .env, never hardcoded"),
             ("✉️", "Appeals Letter Generator",  "AI-drafted formal appeal letter"),
             ("📦", "Batch Analysis",            "Analyse up to 10 decisions at once"),
             ("🕸",  "Bias Radar Chart",          "Visual breakdown of 7 bias dimensions"),
