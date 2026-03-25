@@ -1,11 +1,30 @@
+# Verdict Watch V4 — Requirements
+# Google Solution Challenge 2026 — Build with AI
+
+# ── Core API & Server
 fastapi
 uvicorn[standard]
-streamlit
-sqlalchemy
-groq
-httpx
-python-dotenv
 pydantic
 pydantic-settings
+httpx
+python-dotenv
+
+# ── UI
+streamlit
+
+# ── Database
+sqlalchemy
+
+# ── AI — Primary pipeline
+groq
+
+# ── AI — Google (mandatory for GSC 2026 hackathon)
+google-generativeai
+
+# ── Charts & Data
 plotly
 pandas
+
+# ── File parsing (V4 — PDF / DOCX / image upload)
+PyMuPDF          # pip name: PyMuPDF → import fitz  (PDF extraction)
+python-docx      # DOCX extraction

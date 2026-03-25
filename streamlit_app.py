@@ -1,19 +1,21 @@
 """
-streamlit_app.py — Verdict Watch V3
+streamlit_app.py — Verdict Watch V4
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NO separate API server needed.
-Calls services.py directly — just run:
-  streamlit run streamlit_app.py
+Built for: Google Solution Challenge 2026 — Build with AI
+Problem Statement: Unbiased AI Decision Making
+Powered by: Groq (Llama 3.3 70B) + Gemini (Google AI — mandatory for hackathon)
 
-V3 New Features:
-  • Zero-server architecture (no uvicorn needed)
-  • Inline Groq API key input
-  • Appeals Letter Generator
-  • Batch Analysis (multiple decisions at once)
-  • Bias Radar Chart
-  • CSV export from History
-  • Severity badge system
-  • V3 design refinements
+V4 New Features:
+  • PDF / DOCX / image upload (extract decision text automatically)
+  • Gemini integration (Google AI — required by hackathon rules)
+  • Onboarding welcome modal for first-time users
+  • Guided step-by-step flow (1 → 2 → 3)
+  • Tooltips & help text everywhere
+  • Mobile-friendly layout
+  • Empty state illustrations
+  • Cleaner navigation
+  • Hackathon compliance badge (Google AI model used)
+  • Fixed all V3 issues (alignment, spacing, font clarity)
 """
 
 import streamlit as st
@@ -24,13 +26,29 @@ import re
 import os
 import io
 import json
+import base64
 from datetime import datetime
 from collections import Counter
 from groq import Groq
-from dotenv import load_dotenv
 
-# ── Load environment variables from .env file
-load_dotenv()
+# ── Optional imports for file parsing
+try:
+    import fitz  # PyMuPDF
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+
+try:
+    from docx import Document as DocxDocument
+    DOCX_SUPPORT = True
+except ImportError:
+    DOCX_SUPPORT = False
+
+try:
+    import google.generativeai as genai
+    GEMINI_SUPPORT = True
+except ImportError:
+    GEMINI_SUPPORT = False
 
 # ── Init DB once
 services.init_db()
@@ -40,455 +58,580 @@ services.init_db()
 # ─────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Verdict Watch V3",
+    page_title="Verdict Watch V4 — Unbiased AI",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────
-# CSS DESIGN SYSTEM (V3)
+# CSS — V4 Design System
+# Clean, editorial, high-contrast dark theme
+# Font: Clash Display (headings) + Instrument Sans (body) + JetBrains Mono (code/data)
 # ─────────────────────────────────────────────
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
 :root {
-    --bg-base:     #080b12;
-    --bg-surface:  #0e1320;
-    --bg-elevated: #141926;
-    --bg-card:     #1a2030;
-    --border:      rgba(255,255,255,0.06);
-    --border-med:  rgba(255,255,255,0.10);
-    --accent:      #e8ff47;
-    --accent-dim:  rgba(232,255,71,0.12);
-    --red:         #ff4d4d;
-    --red-dim:     rgba(255,77,77,0.12);
-    --green:       #4dffb0;
-    --green-dim:   rgba(77,255,176,0.10);
-    --blue:        #4d9fff;
-    --blue-dim:    rgba(77,159,255,0.10);
-    --amber:       #ffb84d;
-    --amber-dim:   rgba(255,184,77,0.10);
-    --purple:      #c084fc;
-    --purple-dim:  rgba(192,132,252,0.10);
-    --text-primary:   #eef0f8;
-    --text-secondary: #8892aa;
-    --text-muted:     #4a5268;
+  --ink:       #0a0c0f;
+  --ink-2:     #13171e;
+  --ink-3:     #1c222c;
+  --ink-4:     #252d3a;
+  --rule:      rgba(255,255,255,0.07);
+  --rule-2:    rgba(255,255,255,0.13);
+  --snow:      #f0f2f7;
+  --snow-2:    #b8bfcc;
+  --snow-3:    #5a6478;
+  --lime:      #c6f135;
+  --lime-d:    rgba(198,241,53,0.11);
+  --lime-dd:   rgba(198,241,53,0.05);
+  --coral:     #ff5c5c;
+  --coral-d:   rgba(255,92,92,0.12);
+  --teal:      #3effc8;
+  --teal-d:    rgba(62,255,200,0.10);
+  --amber:     #ffb830;
+  --amber-d:   rgba(255,184,48,0.11);
+  --violet:    #a78bfa;
+  --violet-d:  rgba(167,139,250,0.12);
+  --blue:      #60a5fa;
+  --blue-d:    rgba(96,165,250,0.11);
+  --r:         14px;
+  --r-sm:      9px;
 }
+
+*, *::before, *::after { box-sizing: border-box; }
 
 html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg-base);
-    color: var(--text-primary);
+  font-family: 'Instrument Sans', sans-serif;
+  background: var(--ink) !important;
+  color: var(--snow);
 }
 
+/* ── Sidebar */
 [data-testid="stSidebar"] {
-    background: var(--bg-surface) !important;
-    border-right: 1px solid var(--border) !important;
+  background: var(--ink-2) !important;
+  border-right: 1px solid var(--rule) !important;
 }
+[data-testid="stSidebar"] .block-container { padding: 1.5rem 1rem; }
 
+/* ── Tabs */
 .stTabs [data-baseweb="tab-list"] {
-    background: var(--bg-elevated);
-    border-radius: 12px;
-    padding: 4px;
-    gap: 2px;
-    border: 1px solid var(--border);
+  background: var(--ink-3);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 2px;
+  border: 1px solid var(--rule);
 }
 .stTabs [data-baseweb="tab"] {
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 500;
-    font-size: 0.88rem;
-    color: var(--text-secondary);
-    background: transparent;
-    border-radius: 8px;
-    padding: 8px 16px;
-    border: none;
+  font-family: 'Instrument Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--snow-3);
+  background: transparent;
+  border-radius: 9px;
+  padding: 7px 14px;
+  border: none;
+  letter-spacing: 0.2px;
 }
 .stTabs [aria-selected="true"] {
-    background: var(--accent) !important;
-    color: #080b12 !important;
-    font-weight: 700;
+  background: var(--lime) !important;
+  color: #0a0c0f !important;
 }
-.stTabs [data-baseweb="tab-panel"] { padding-top: 1.5rem; }
+.stTabs [data-baseweb="tab-panel"] { padding-top: 1.8rem; }
 
+/* ── Buttons */
 .stButton > button {
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 600;
-    font-size: 0.88rem;
-    background: var(--accent);
-    color: #080b12;
-    border: none;
-    border-radius: 10px;
-    padding: 0.6rem 1.6rem;
-    width: 100%;
-    transition: all 0.2s ease;
+  font-family: 'Instrument Sans', sans-serif;
+  font-weight: 700;
+  font-size: 0.88rem;
+  background: var(--lime);
+  color: #0a0c0f;
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 1.5rem;
+  width: 100%;
+  letter-spacing: 0.3px;
+  transition: opacity 0.18s, transform 0.18s;
 }
-.stButton > button:hover { opacity: 0.85; transform: translateY(-1px); }
+.stButton > button:hover { opacity: 0.84; transform: translateY(-1px); }
+.stButton > button:active { transform: translateY(0); }
 
+/* ── Inputs */
 .stTextArea textarea {
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 0.92rem !important;
-    background: var(--bg-card) !important;
-    border: 1px solid var(--border-med) !important;
-    border-radius: 12px !important;
-    color: var(--text-primary) !important;
-    line-height: 1.7 !important;
+  font-family: 'Instrument Sans', sans-serif !important;
+  font-size: 0.93rem !important;
+  background: var(--ink-3) !important;
+  border: 1.5px solid var(--rule-2) !important;
+  border-radius: 12px !important;
+  color: var(--snow) !important;
+  line-height: 1.75 !important;
 }
 .stTextArea textarea:focus {
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 2px var(--accent-dim) !important;
+  border-color: var(--lime) !important;
+  box-shadow: 0 0 0 2px rgba(198,241,53,0.14) !important;
 }
 .stSelectbox > div > div {
-    background: var(--bg-card) !important;
-    border: 1px solid var(--border-med) !important;
-    border-radius: 10px !important;
-    color: var(--text-primary) !important;
-    font-family: 'DM Sans', sans-serif !important;
+  background: var(--ink-3) !important;
+  border: 1.5px solid var(--rule-2) !important;
+  border-radius: 10px !important;
+  color: var(--snow) !important;
 }
 .stTextInput > div > div > input {
-    background: var(--bg-card) !important;
-    border: 1px solid var(--border-med) !important;
-    border-radius: 10px !important;
-    color: var(--text-primary) !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 0.88rem !important;
+  background: var(--ink-3) !important;
+  border: 1.5px solid var(--rule-2) !important;
+  border-radius: 10px !important;
+  color: var(--snow) !important;
+  font-family: 'Instrument Sans', sans-serif !important;
 }
 
+/* ── File uploader */
+[data-testid="stFileUploadDropzone"] {
+  background: var(--ink-3) !important;
+  border: 2px dashed var(--rule-2) !important;
+  border-radius: 14px !important;
+  transition: border-color 0.2s;
+}
+[data-testid="stFileUploadDropzone"]:hover {
+  border-color: var(--lime) !important;
+}
+
+/* ── Metrics */
 [data-testid="metric-container"] {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 1.2rem 1.4rem;
+  background: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 1.2rem 1.4rem;
 }
 [data-testid="metric-container"] label {
-    font-family: 'DM Mono', monospace !important;
-    font-size: 0.68rem !important;
-    letter-spacing: 2px !important;
-    text-transform: uppercase !important;
-    color: var(--text-muted) !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.62rem !important;
+  letter-spacing: 2.5px !important;
+  text-transform: uppercase !important;
+  color: var(--snow-3) !important;
 }
 [data-testid="metric-container"] [data-testid="stMetricValue"] {
-    font-family: 'Syne', sans-serif !important;
-    font-weight: 700 !important;
-    font-size: 2rem !important;
-    color: var(--text-primary) !important;
+  font-family: 'Fraunces', serif !important;
+  font-weight: 900 !important;
+  font-size: 2.1rem !important;
+  color: var(--snow) !important;
 }
 
-.stProgress > div > div { background: var(--accent) !important; border-radius: 4px; }
+/* ── Progress */
+.stProgress > div > div { background: var(--lime) !important; border-radius: 4px; }
+
+/* ── Download button */
 .stDownloadButton > button {
-    background: var(--bg-card) !important;
-    color: var(--accent) !important;
-    border: 1px solid var(--accent) !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-weight: 600;
-    border-radius: 10px !important;
-    width: 100%;
+  background: var(--ink-3) !important;
+  color: var(--lime) !important;
+  border: 1.5px solid var(--lime) !important;
+  font-family: 'Instrument Sans', sans-serif !important;
+  font-weight: 600;
+  border-radius: 10px !important;
+  width: 100%;
 }
-.stDownloadButton > button:hover { background: var(--accent-dim) !important; }
+.stDownloadButton > button:hover { background: var(--lime-d) !important; }
+
+/* ── Expander */
 .streamlit-expanderHeader {
-    font-family: 'DM Sans', sans-serif !important;
-    font-weight: 500 !important;
-    background: var(--bg-card) !important;
-    border-radius: 10px !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text-secondary) !important;
+  font-family: 'Instrument Sans', sans-serif !important;
+  font-weight: 600 !important;
+  background: var(--ink-3) !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--rule) !important;
+  color: var(--snow-2) !important;
 }
 
-/* ── V3 Custom Components ── */
-.vw-wordmark {
-    font-family: 'Syne', sans-serif;
-    font-size: 3rem;
-    font-weight: 800;
-    letter-spacing: -1.5px;
-    color: var(--text-primary);
-    line-height: 1;
+/* ── Info / Warning */
+.stAlert { border-radius: 12px !important; font-family: 'Instrument Sans', sans-serif !important; }
+
+/* ─── CUSTOM COMPONENTS ─────────────────────────── */
+
+/* Hero wordmark */
+.v4-hero {
+  padding: 2rem 0 1rem;
 }
-.vw-tagline {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.72rem;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-top: 0.4rem;
+.v4-wordmark {
+  font-family: 'Fraunces', serif;
+  font-size: 3.2rem;
+  font-weight: 900;
+  color: var(--snow);
+  letter-spacing: -2px;
+  line-height: 1;
 }
-.vw-v3-badge {
-    display: inline-block;
-    background: var(--purple);
-    color: #080b12;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.6rem;
-    font-weight: 500;
-    letter-spacing: 2px;
-    padding: 3px 7px;
-    border-radius: 4px;
-    vertical-align: middle;
-    margin-left: 8px;
-    position: relative;
-    top: -5px;
+.v4-tagline {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--snow-3);
+  margin-top: 0.5rem;
+}
+.v4-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--lime);
+  color: #0a0c0f;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  vertical-align: middle;
+  position: relative;
+  top: -6px;
+  margin-left: 8px;
+}
+.hackathon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--lime-d);
+  border: 1px solid rgba(198,241,53,0.3);
+  color: var(--lime);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  padding: 5px 12px;
+  border-radius: 99px;
+  margin-top: 0.8rem;
 }
 
+/* Step indicator */
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 2rem;
+}
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+.step-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: 58%;
+  right: 0;
+  height: 2px;
+  background: var(--rule-2);
+  z-index: 0;
+}
+.step-item.done:not(:last-child)::after { background: var(--lime); }
+.step-num {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border: 2px solid var(--rule-2);
+  color: var(--snow-3);
+  background: var(--ink-3);
+  z-index: 1;
+}
+.step-item.done .step-num {
+  background: var(--lime);
+  color: #0a0c0f;
+  border-color: var(--lime);
+}
+.step-item.active .step-num {
+  background: var(--ink-3);
+  color: var(--lime);
+  border-color: var(--lime);
+  box-shadow: 0 0 0 4px rgba(198,241,53,0.12);
+}
+.step-label {
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.7rem;
+  color: var(--snow-3);
+  margin-top: 0.4rem;
+  text-align: center;
+}
+.step-item.active .step-label, .step-item.done .step-label { color: var(--snow-2); }
+
+/* Upload zone */
+.upload-hint {
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.82rem;
+  color: var(--snow-3);
+  margin-top: 0.4rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--lime-dd);
+  border-radius: 8px;
+  border-left: 3px solid var(--lime);
+}
+
+/* Verdict banners */
 .verdict-bias {
-    background: var(--red-dim);
-    border: 1px solid var(--red);
-    border-radius: 16px;
-    padding: 1.4rem 2rem;
-    text-align: center;
-    box-shadow: 0 0 40px rgba(255,77,77,0.12);
+  background: var(--coral-d);
+  border: 1.5px solid rgba(255,92,92,0.4);
+  border-radius: var(--r);
+  padding: 1.8rem 2.2rem;
+  text-align: center;
+  box-shadow: 0 0 50px rgba(255,92,92,0.09);
 }
 .verdict-clean {
-    background: var(--green-dim);
-    border: 1px solid var(--green);
-    border-radius: 16px;
-    padding: 1.4rem 2rem;
-    text-align: center;
-    box-shadow: 0 0 40px rgba(77,255,176,0.08);
+  background: var(--teal-d);
+  border: 1.5px solid rgba(62,255,200,0.35);
+  border-radius: var(--r);
+  padding: 1.8rem 2.2rem;
+  text-align: center;
+  box-shadow: 0 0 50px rgba(62,255,200,0.07);
 }
-.v-icon { font-size: 2rem; }
+.v-icon { font-size: 2.2rem; }
 .v-label {
-    font-family: 'Syne', sans-serif;
-    font-size: 1.8rem;
-    font-weight: 800;
-    letter-spacing: -0.5px;
-    margin-top: 0.3rem;
+  font-family: 'Fraunces', serif;
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  margin-top: 0.3rem;
 }
-.verdict-bias .v-label { color: var(--red); }
-.verdict-clean .v-label { color: var(--green); }
+.verdict-bias  .v-label { color: var(--coral); }
+.verdict-clean .v-label { color: var(--teal); }
 .v-sub {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.68rem;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-top: 0.2rem;
-    opacity: 0.6;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 0.3rem;
+  opacity: 0.55;
 }
-.verdict-bias .v-sub { color: var(--red); }
-.verdict-clean .v-sub { color: var(--green); }
+.verdict-bias  .v-sub { color: var(--coral); }
+.verdict-clean .v-sub { color: var(--teal); }
 
-.severity-high   { color: var(--red);    background: var(--red-dim);    border: 1px solid rgba(255,77,77,0.3);    border-radius: 6px; padding: 2px 10px; font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 1px; }
-.severity-medium { color: var(--amber);  background: var(--amber-dim);  border: 1px solid rgba(255,184,77,0.3);  border-radius: 6px; padding: 2px 10px; font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 1px; }
-.severity-low    { color: var(--green);  background: var(--green-dim);  border: 1px solid rgba(77,255,176,0.3);  border-radius: 6px; padding: 2px 10px; font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 1px; }
+/* Severity badges */
+.sev-high   { background: var(--coral-d); color: #ff9090; border: 1px solid rgba(255,92,92,0.3);  border-radius: 6px; padding: 3px 11px; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 1px; }
+.sev-med    { background: var(--amber-d); color: #ffd47a; border: 1px solid rgba(255,184,48,0.3); border-radius: 6px; padding: 3px 11px; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 1px; }
+.sev-low    { background: var(--teal-d);  color: #80ffe0; border: 1px solid rgba(62,255,200,0.3); border-radius: 6px; padding: 3px 11px; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; letter-spacing: 1px; }
 
-.info-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 1.1rem 1.4rem;
-    margin-bottom: 0.5rem;
+/* Info cards */
+.icard {
+  background: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 1rem 1.3rem;
+  margin-bottom: 0.5rem;
 }
-.info-card.red    { border-left: 3px solid var(--red); }
-.info-card.green  { border-left: 3px solid var(--green); }
-.info-card.amber  { border-left: 3px solid var(--amber); }
-.info-card.blue   { border-left: 3px solid var(--blue); }
-.info-card.purple { border-left: 3px solid var(--purple); }
+.icard.coral  { border-left: 3px solid var(--coral); }
+.icard.teal   { border-left: 3px solid var(--teal); }
+.icard.amber  { border-left: 3px solid var(--amber); }
+.icard.blue   { border-left: 3px solid var(--blue); }
+.icard.violet { border-left: 3px solid var(--violet); }
+.icard.lime   { border-left: 3px solid var(--lime); }
 .ic-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.62rem;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--snow-3);
+  margin-bottom: 0.45rem;
 }
 .ic-value {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.95rem;
-    color: var(--text-primary);
-    line-height: 1.6;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.92rem;
+  color: var(--snow);
+  line-height: 1.65;
 }
 .ic-value.mono {
-    font-family: 'DM Mono', monospace;
-    font-size: 1rem;
-    font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
 }
 
-.chip {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 6px;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    margin: 2px 3px 2px 0;
-    letter-spacing: 0.5px;
-}
-.chip-red    { background: var(--red-dim);    color: #ff9090; border: 1px solid rgba(255,77,77,0.3); }
-.chip-green  { background: var(--green-dim);  color: #80ffd0; border: 1px solid rgba(77,255,176,0.3); }
-.chip-blue   { background: var(--blue-dim);   color: #80c4ff; border: 1px solid rgba(77,159,255,0.3); }
-.chip-amber  { background: var(--amber-dim);  color: #ffd480; border: 1px solid rgba(255,184,77,0.3); }
-.chip-purple { background: var(--purple-dim); color: #e0b4ff; border: 1px solid rgba(192,132,252,0.3); }
-.chip-muted  { background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid var(--border); }
+/* Chips */
+.chip { display: inline-block; padding: 3px 10px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; margin: 2px 3px 2px 0; }
+.ch-coral  { background: var(--coral-d);  color: #ff9090; border: 1px solid rgba(255,92,92,0.25); }
+.ch-teal   { background: var(--teal-d);   color: #7affdf; border: 1px solid rgba(62,255,200,0.25); }
+.ch-blue   { background: var(--blue-d);   color: #93c5fd; border: 1px solid rgba(96,165,250,0.25); }
+.ch-amber  { background: var(--amber-d);  color: #fcd68a; border: 1px solid rgba(255,184,48,0.25); }
+.ch-violet { background: var(--violet-d); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.25); }
+.ch-muted  { background: rgba(255,255,255,0.04); color: var(--snow-3); border: 1px solid var(--rule); }
 
+/* Recommendations */
 .rec-item {
-    display: flex;
-    gap: 1rem;
-    align-items: flex-start;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 0.9rem 1.2rem;
-    margin-bottom: 0.6rem;
+  display: flex; gap: 1rem; align-items: flex-start;
+  background: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 0.9rem 1.2rem;
+  margin-bottom: 0.55rem;
 }
 .rec-num {
-    background: var(--accent);
-    color: #080b12;
-    border-radius: 6px;
-    min-width: 22px;
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.72rem;
-    font-weight: 500;
-    flex-shrink: 0;
-    margin-top: 2px;
+  background: var(--lime);
+  color: #0a0c0f;
+  border-radius: 6px;
+  min-width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; font-weight: 500;
+  flex-shrink: 0; margin-top: 1px;
 }
 .rec-text {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.92rem;
-    color: var(--text-secondary);
-    line-height: 1.55;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.91rem;
+  color: var(--snow-2);
+  line-height: 1.6;
 }
 
-/* Appeals letter box */
-.appeal-box {
-    background: var(--bg-card);
-    border: 1px solid var(--purple);
-    border-radius: 14px;
-    padding: 1.5rem 2rem;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.82rem;
-    line-height: 1.9;
-    color: var(--text-secondary);
-    white-space: pre-wrap;
-    box-shadow: 0 0 30px rgba(192,132,252,0.08);
-}
-
-/* Batch table */
-.batch-row-bias  { background: rgba(255,77,77,0.06); }
-.batch-row-clean { background: rgba(77,255,176,0.04); }
-
-.sec-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.62rem;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 0.7rem;
-}
-.divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
-
+/* Highlight box */
 .highlight-box {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.93rem;
-    line-height: 1.8;
-    color: var(--text-secondary);
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.2rem 1.5rem;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.92rem;
+  line-height: 1.85;
+  color: var(--snow-2);
+  background: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 1.2rem 1.5rem;
 }
 .highlight-box mark {
-    background: rgba(255,77,77,0.18);
-    color: #ff9090;
-    border-radius: 4px;
-    padding: 1px 4px;
+  background: rgba(255,92,92,0.18);
+  color: #ff9090;
+  border-radius: 3px;
+  padding: 1px 4px;
 }
 
-.status-pill-ok {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--green-dim); border: 1px solid rgba(77,255,176,0.3);
-    color: var(--green); border-radius: 999px; padding: 4px 14px;
-    font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 1px;
-}
-.status-pill-warn {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--amber-dim); border: 1px solid rgba(255,184,77,0.3);
-    color: var(--amber); border-radius: 999px; padding: 4px 14px;
-    font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 1px;
-}
-.status-pill-err {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--red-dim); border: 1px solid rgba(255,77,77,0.3);
-    color: var(--red); border-radius: 999px; padding: 4px 14px;
-    font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 1px;
+/* Appeal letter */
+.appeal-box {
+  background: var(--ink-3);
+  border: 1.5px solid rgba(167,139,250,0.35);
+  border-radius: var(--r);
+  padding: 1.6rem 2rem;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.9;
+  color: var(--snow-2);
+  white-space: pre-wrap;
+  box-shadow: 0 0 35px rgba(167,139,250,0.06);
 }
 
-.how-step { display: flex; gap: 0.8rem; align-items: flex-start; margin-bottom: 0.7rem; }
-.how-num  { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--accent); min-width: 18px; padding-top: 2px; }
-.how-text { font-family: 'DM Sans', sans-serif; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; }
+/* Status pills */
+.pill-ok   { display: inline-flex; align-items: center; gap: 6px; background: var(--teal-d);  border: 1px solid rgba(62,255,200,0.3);  color: var(--teal);  border-radius: 99px; padding: 4px 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; letter-spacing: 1px; }
+.pill-warn { display: inline-flex; align-items: center; gap: 6px; background: var(--amber-d); border: 1px solid rgba(255,184,48,0.3);  color: var(--amber); border-radius: 99px; padding: 4px 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; letter-spacing: 1px; }
+.pill-err  { display: inline-flex; align-items: center; gap: 6px; background: var(--coral-d); border: 1px solid rgba(255,92,92,0.3);   color: var(--coral); border-radius: 99px; padding: 4px 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; letter-spacing: 1px; }
 
-.compare-header {
-    font-family: 'Syne', sans-serif;
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 0.4rem;
+/* Section labels */
+.sec-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--snow-3);
+  margin-bottom: 0.7rem;
 }
+.divider { border: none; border-top: 1px solid var(--rule); margin: 1.8rem 0; }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 3.5rem 2rem;
+  background: var(--ink-3);
+  border: 1px dashed var(--rule-2);
+  border-radius: var(--r);
+  color: var(--snow-3);
+}
+.empty-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+.empty-title { font-family: 'Fraunces', serif; font-size: 1.2rem; color: var(--snow-2); margin-bottom: 0.4rem; }
+.empty-sub { font-family: 'Instrument Sans', sans-serif; font-size: 0.85rem; }
+
+/* How-to steps in sidebar */
+.hw { display: flex; gap: 0.7rem; align-items: flex-start; margin-bottom: 0.65rem; }
+.hw-n { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--lime); min-width: 18px; padding-top: 1px; }
+.hw-t { font-family: 'Instrument Sans', sans-serif; font-size: 0.8rem; color: var(--snow-3); line-height: 1.5; }
+
+/* Extracted text preview */
+.extracted-preview {
+  background: var(--ink-4);
+  border: 1px solid var(--rule-2);
+  border-radius: 10px;
+  padding: 1rem 1.3rem;
+  font-family: 'Instrument Sans', sans-serif;
+  font-size: 0.85rem;
+  color: var(--snow-2);
+  line-height: 1.7;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+/* Feature cards (About tab) */
+.feat-card {
+  background: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 1rem 1.3rem;
+  margin-bottom: 0.5rem;
+  transition: border-color 0.2s;
+}
+.feat-card:hover { border-color: var(--lime); }
+.feat-title { font-family: 'Instrument Sans', sans-serif; font-size: 0.9rem; font-weight: 700; color: var(--snow); margin-bottom: 0.2rem; }
+.feat-desc  { font-family: 'Instrument Sans', sans-serif; font-size: 0.82rem; color: var(--snow-3); }
+
+/* Compare header */
+.cmp-header {
+  font-family: 'Fraunces', serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--snow);
+  margin-bottom: 0.5rem;
+}
+
+/* Footer */
 .footer-bar {
-    text-align: center;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.66rem;
-    letter-spacing: 1.5px;
-    color: var(--text-muted);
-    margin-top: 3rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border);
-    text-transform: uppercase;
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--snow-3);
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+  text-transform: uppercase;
+}
+.footer-bar a { color: var(--lime); text-decoration: none; }
+
+/* Gemini badge */
+.gemini-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: linear-gradient(135deg, rgba(96,165,250,0.12), rgba(167,139,250,0.12));
+  border: 1px solid rgba(96,165,250,0.3);
+  border-radius: 99px;
+  padding: 5px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.63rem;
+  color: var(--blue);
+  letter-spacing: 1px;
 }
 
-/* Grade badge */
-.grade-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 64px; height: 64px;
-    border-radius: 14px;
-    font-family: 'Syne', sans-serif;
-    font-size: 2.2rem;
-    font-weight: 800;
-    border: 2px solid currentColor;
+/* Info tooltip */
+.tip {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  border: 1px solid var(--rule-2);
+  color: var(--snow-3);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  text-align: center;
+  line-height: 16px;
+  cursor: help;
+  margin-left: 5px;
+  vertical-align: middle;
 }
 
-/* Sentence bias row */
-.sent-row {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 0.88rem;
-    line-height: 1.6;
-    padding: 0.55rem 0.9rem;
-    border-radius: 8px;
-    margin-bottom: 0.4rem;
-    border-left: 3px solid transparent;
-}
-.sent-row.flagged {
-    background: rgba(255,77,77,0.07);
-    border-left-color: var(--red);
-    color: var(--text-primary);
-}
-.sent-row.clean {
-    background: rgba(255,255,255,0.02);
-    border-left-color: rgba(255,255,255,0.05);
-    color: var(--text-secondary);
-}
-.sent-dims {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.62rem;
-    letter-spacing: 1px;
-    color: #ff9090;
-    margin-top: 2px;
-}
-
-/* Legal ref card */
-.legal-card {
-    background: var(--bg-card);
-    border: 1px solid rgba(77,159,255,0.2);
-    border-left: 3px solid var(--blue);
-    border-radius: 10px;
-    padding: 0.7rem 1rem;
-    margin-bottom: 0.4rem;
-}
-.legal-dim   { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 2px; color: var(--blue); text-transform: uppercase; }
-.legal-text  { font-family: 'DM Sans', sans-serif; font-size: 0.82rem; color: var(--text-secondary); margin-top: 3px; }
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--ink-2); }
+::-webkit-scrollbar-thumb { background: var(--ink-4); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--snow-3); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -497,29 +640,34 @@ html, body, [class*="css"] {
 # ─────────────────────────────────────────────
 
 EXAMPLES = [
-    {"tag": "Job Application", "emoji": "💼", "type": "job",
-     "text": ("Thank you for applying to the Software Engineer position. "
-              "After careful review we have decided not to move forward. "
-              "We felt other candidates were a stronger fit for our team culture at this time.")},
-    {"tag": "Bank Loan", "emoji": "🏦", "type": "loan",
-     "text": ("Your loan application has been declined. Primary reasons: insufficient credit history, "
-              "residential area risk score, employment sector classification. "
+    {"tag": "Job Rejection",      "emoji": "💼", "type": "job",
+     "text": ("Thank you for applying to the Software Engineer position. After careful review "
+              "we have decided not to move forward. We felt other candidates were a stronger "
+              "fit for our team culture at this time.")},
+    {"tag": "Bank Loan Denial",   "emoji": "🏦", "type": "loan",
+     "text": ("Your loan application has been declined. Primary reasons: insufficient credit "
+              "history, residential area risk score, employment sector classification. "
               "You may reapply after 6 months.")},
-    {"tag": "Medical Triage", "emoji": "🏥", "type": "medical",
+    {"tag": "Medical Triage",     "emoji": "🏥", "type": "medical",
      "text": ("Based on your intake assessment you have been assigned Priority Level 3. "
-              "Factors considered: age group, reported pain level, primary language, insurance classification.")},
-    {"tag": "University", "emoji": "🎓", "type": "university",
-     "text": ("We regret to inform you that your application for admission has not been successful. "
-              "Our admissions committee considered zip code region diversity metrics, legacy status, "
-              "and extracurricular profile alignment when making this decision.")},
+              "Factors considered: age group, reported pain level, primary language, "
+              "insurance classification.")},
+    {"tag": "University Rejection","emoji": "🎓", "type": "university",
+     "text": ("We regret to inform you that your application for admission has not been "
+              "successful. Our admissions committee considered zip code region diversity "
+              "metrics, legacy status, and extracurricular profile alignment.")},
+    {"tag": "Insurance Denial",   "emoji": "📋", "type": "other",
+     "text": ("After reviewing your claim, we are unable to provide coverage. Contributing "
+              "factors include: neighborhood risk classification, occupational hazard tier, "
+              "and historical claims ratio in your zip code.")},
 ]
 
 TYPE_LABELS = {
-    "job":        "💼 Job Application",
-    "loan":       "🏦 Bank Loan",
-    "medical":    "🏥 Medical / Triage",
-    "university": "🎓 University Admission",
-    "other":      "📄 Other",
+    "job":        "💼  Job / Hiring",
+    "loan":       "🏦  Bank Loan / Credit",
+    "medical":    "🏥  Medical / Triage",
+    "university": "🎓  University Admission",
+    "other":      "📄  Other Decision",
 }
 
 BIAS_KEYWORDS = {
@@ -532,25 +680,34 @@ BIAS_KEYWORDS = {
     "Insurance":     r"\b(insurance|coverage|uninsured|medicaid|medicare|policy|insurance classification)\b",
 }
 
-CHIP_STYLES = ["chip-red", "chip-amber", "chip-blue", "chip-green", "chip-purple"]
+CHIP_STYLES = ["ch-coral", "ch-amber", "ch-blue", "ch-teal", "ch-violet"]
 BIAS_DIMS   = ["Gender", "Age", "Racial", "Geographic", "Socioeconomic", "Language", "Insurance"]
+
+ACCEPTED_FILE_TYPES = ["pdf", "docx", "txt", "png", "jpg", "jpeg"]
 
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
 
 def get_api_key() -> str:
+    if st.session_state.get("groq_api_key"):
+        return st.session_state["groq_api_key"]
     return os.getenv("GROQ_API_KEY", "")
 
-def set_env_key():
-    pass  # key is loaded from .env via load_dotenv()
+def get_gemini_key() -> str:
+    if st.session_state.get("gemini_api_key"):
+        return st.session_state["gemini_api_key"]
+    return os.getenv("GEMINI_API_KEY", "")
 
-def check_groq_key() -> bool:
-    return bool(os.getenv("GROQ_API_KEY", ""))
+def set_env_keys():
+    if get_api_key():   os.environ["GROQ_API_KEY"]   = get_api_key()
+    if get_gemini_key(): os.environ["GEMINI_API_KEY"] = get_gemini_key()
 
+def check_groq_key() -> bool:  return bool(get_api_key())
+def check_gemini_key() -> bool: return bool(get_gemini_key())
 
 def run_analysis(text: str, dtype: str) -> tuple:
-    """Run full pipeline — returns (report_dict, error_str | None)."""
+    set_env_keys()
     try:
         report = services.run_full_pipeline(decision_text=text, decision_type=dtype)
         return report, None
@@ -559,19 +716,70 @@ def run_analysis(text: str, dtype: str) -> tuple:
     except Exception as e:
         return None, f"Pipeline error: {str(e)}"
 
-
 def get_all_reports() -> list:
     try:
         return services.get_all_reports()
     except Exception:
         return []
 
+# ── File text extraction ──────────────────────
+
+def extract_text_from_file(uploaded_file) -> str:
+    """Extract text from PDF, DOCX, TXT, or image file."""
+    fname = uploaded_file.name.lower()
+    content = uploaded_file.read()
+
+    if fname.endswith(".txt"):
+        return content.decode("utf-8", errors="ignore")
+
+    if fname.endswith(".pdf"):
+        if not PDF_SUPPORT:
+            return "[PDF parsing unavailable — install PyMuPDF: pip install PyMuPDF]"
+        try:
+            doc = fitz.open(stream=content, filetype="pdf")
+            text = "\n".join(page.get_text() for page in doc)
+            return text.strip() or "[PDF has no extractable text — may be scanned]"
+        except Exception as e:
+            return f"[PDF parse error: {e}]"
+
+    if fname.endswith(".docx"):
+        if not DOCX_SUPPORT:
+            return "[DOCX parsing unavailable — install python-docx: pip install python-docx]"
+        try:
+            doc = DocxDocument(io.BytesIO(content))
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        except Exception as e:
+            return f"[DOCX parse error: {e}]"
+
+    if fname.endswith((".png", ".jpg", ".jpeg")):
+        # Use Gemini Vision if available, else placeholder
+        if check_gemini_key() and GEMINI_SUPPORT:
+            try:
+                genai.configure(api_key=get_gemini_key())
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                img_data = base64.b64encode(content).decode()
+                ext = fname.rsplit(".", 1)[-1]
+                mime = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+                response = model.generate_content([
+                    "Extract all text from this document image. Return only the raw text, "
+                    "no formatting or commentary.",
+                    {"mime_type": mime, "data": img_data},
+                ])
+                return response.text.strip()
+            except Exception as e:
+                return f"[Gemini Vision error: {e}]"
+        else:
+            return ("[Image OCR requires Gemini API key. Add your GEMINI_API_KEY in the sidebar, "
+                    "or paste the text manually below.]")
+
+    return "[Unsupported file type]"
+
 
 def generate_appeal_letter(report: dict, decision_text: str, decision_type: str) -> str:
-    """V3: Generate a formal appeal letter via Groq."""
+    set_env_keys()
     client = services.get_groq_client()
-    bias_types = ", ".join(report.get("bias_types", [])) or "undisclosed bias"
-    affected   = report.get("affected_characteristic", "a protected characteristic")
+    bias_types  = ", ".join(report.get("bias_types", [])) or "undisclosed bias"
+    affected    = report.get("affected_characteristic", "a protected characteristic")
     explanation = report.get("explanation", "")
     fair_outcome = report.get("fair_outcome", "a fair reassessment")
 
@@ -582,17 +790,16 @@ def generate_appeal_letter(report: dict, decision_text: str, decision_type: str)
         "as placeholders. Write in first person."
     )
     prompt = (
-        f"Write a formal appeal letter based on these facts:\n\n"
+        f"Write a formal appeal letter based on:\n\n"
         f"Decision type: {decision_type}\n"
-        f"Original decision text: {decision_text}\n"
+        f"Original decision: {decision_text}\n"
         f"Bias detected: {bias_types}\n"
         f"Characteristic affected: {affected}\n"
         f"What was wrong: {explanation}\n"
-        f"What fair outcome should be: {fair_outcome}\n\n"
+        f"Fair outcome should be: {fair_outcome}\n\n"
         "The letter should: open professionally, reference the specific decision, "
-        "clearly state grounds for appeal citing the discriminatory factors, "
-        "request a formal review, and close professionally. "
-        "Keep it under 400 words."
+        "clearly state grounds for appeal citing discriminatory factors, "
+        "request a formal review, close professionally. Under 400 words."
     )
     resp = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -605,15 +812,38 @@ def generate_appeal_letter(report: dict, decision_text: str, decision_type: str)
     return resp.choices[0].message.content.strip()
 
 
+def gemini_plain_explanation(report: dict) -> str:
+    """Use Gemini to generate a very plain-English explanation for non-technical users."""
+    if not check_gemini_key() or not GEMINI_SUPPORT:
+        return ""
+    try:
+        genai.configure(api_key=get_gemini_key())
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        bias_types   = ", ".join(report.get("bias_types", [])) or "unknown"
+        affected     = report.get("affected_characteristic", "unknown")
+        fair_outcome = report.get("fair_outcome", "unknown")
+        prompt = (
+            f"Explain in 2-3 simple sentences (like explaining to a non-technical person) "
+            f"why this decision may be unfair. Bias types: {bias_types}. "
+            f"Characteristic affected: {affected}. Fair outcome: {fair_outcome}. "
+            "Be empathetic, clear, and direct."
+        )
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception:
+        return ""
+
+
+# ── Rendering helpers ─────────────────────────
+
 def chips_html(items, style="auto"):
     if not items:
-        return '<span class="chip chip-muted">None detected</span>'
+        return '<span class="chip ch-muted">None detected</span>'
     html = ""
     for i, item in enumerate(items):
         s = CHIP_STYLES[i % len(CHIP_STYLES)] if style == "auto" else style
         html += f'<span class="chip {s}">{item}</span>'
     return html
-
 
 def highlight_text(text, bias_types):
     out = text
@@ -624,115 +854,31 @@ def highlight_text(text, bias_types):
                              out, flags=re.IGNORECASE)
     return out
 
-
-def severity_badge(conf: float, bias_found: bool) -> str:
+def severity_badge(conf, bias_found):
     if not bias_found:
-        return '<span class="severity-low">LOW RISK</span>'
+        return '<span class="sev-low">LOW RISK</span>'
     if conf >= 0.75:
-        return '<span class="severity-high">HIGH SEVERITY</span>'
+        return '<span class="sev-high">HIGH SEVERITY</span>'
     if conf >= 0.45:
-        return '<span class="severity-medium">MEDIUM SEVERITY</span>'
-    return '<span class="severity-low">LOW SEVERITY</span>'
-
-
-LEGAL_REFS = {
-    "Gender":        "Equality Act 2010 (UK) · Title VII Civil Rights Act (US) · EU Equal Treatment Directive 2006/54/EC",
-    "Age":           "Age Discrimination in Employment Act (US) · Equality Act 2010 s.5 (UK) · EU Directive 2000/78/EC",
-    "Racial":        "Race Relations Act / Equality Act 2010 (UK) · Civil Rights Act Title VI (US) · ICERD",
-    "Geographic":    "Fair Housing Act (US) · EU Anti-Discrimination Directives · ECHR Article 14",
-    "Socioeconomic": "Equality Act 2010 s.1 (UK) · ECHR Protocol 12 · ILO Discrimination Convention 111",
-    "Language":      "Title VI Civil Rights Act (US) · EU Charter Article 21 · ECHR Article 14",
-    "Insurance":     "ACA Section 1557 (US) · Equality Act 2010 (UK) · EU Gender Goods & Services Directive",
-}
-
-FAIRNESS_GRADES = [
-    (0.0,  0.15, "A", "#4dffb0", "Likely fair — no strong discriminatory signals detected."),
-    (0.15, 0.35, "B", "#80ffd0", "Mostly fair — minor indicators worth monitoring."),
-    (0.35, 0.55, "C", "#ffb84d", "Questionable — moderate bias signals present."),
-    (0.55, 0.75, "D", "#ff9090", "Likely biased — significant discriminatory factors found."),
-    (0.75, 1.01, "F", "#ff4d4d", "Highly biased — strong discriminatory patterns detected."),
-]
-
-def fairness_grade(confidence: float, bias_found: bool) -> tuple:
-    """Returns (grade, color, description)."""
-    if not bias_found:
-        return "A", "#4dffb0", "Likely fair — no strong discriminatory signals detected."
-    for lo, hi, grade, color, desc in FAIRNESS_GRADES:
-        if lo <= confidence < hi:
-            return grade, color, desc
-    return "F", "#ff4d4d", "Highly biased — strong discriminatory patterns detected."
-
-
-def get_legal_refs(bias_types: list) -> list:
-    """Return relevant legal references for detected bias types."""
-    refs = []
-    for bt in bias_types:
-        for dim, ref in LEGAL_REFS.items():
-            if dim.lower() in bt.lower() and ref not in refs:
-                refs.append((dim, ref))
-    return refs
-
-
-def extract_bias_sentences(text: str, bias_types: list) -> list:
-    """Split text into sentences and flag which ones contain bias keywords."""
-    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-    flagged = []
-    for sent in sentences:
-        matched = []
-        for bt in bias_types:
-            for dim, pat in BIAS_KEYWORDS.items():
-                if dim.lower() in bt.lower():
-                    if re.search(pat, sent, re.IGNORECASE):
-                        matched.append(dim)
-        flagged.append({"sentence": sent, "bias_dims": list(set(matched))})
-    return flagged
-
-
-def generate_rebuttal_points(report: dict, decision_text: str) -> str:
-    """Generate bullet-point rebuttal arguments via Groq."""
-    client = services.get_groq_client()
-    bias_types  = ", ".join(report.get("bias_types", [])) or "undisclosed"
-    affected    = report.get("affected_characteristic", "protected characteristic")
-    explanation = report.get("explanation", "")
-    system = (
-        "You are an expert in employment law and discrimination cases. "
-        "Generate a concise numbered list of strong rebuttal arguments the applicant "
-        "can use when challenging the decision. Be specific and legally grounded. "
-        "Return plain text, numbered 1-5, no markdown."
-    )
-    prompt = (
-        f"Decision text: {decision_text}\n"
-        f"Bias types found: {bias_types}\n"
-        f"Characteristic affected: {affected}\n"
-        f"What went wrong: {explanation}\n\n"
-        "Write 5 specific rebuttal points the person can raise in an appeal or complaint."
-    )
-    resp = client.chat.completions.create(
-        model="llama-3.3-70b-versatile", max_tokens=600,
-        messages=[{"role": "system", "content": system},
-                  {"role": "user", "content": prompt}],
-    )
-    return resp.choices[0].message.content.strip()
-
-
-# ─── Charts ───────────────────────────────────
+        return '<span class="sev-med">MEDIUM SEVERITY</span>'
+    return '<span class="sev-low">LOW SEVERITY</span>'
 
 def gauge_chart(value, bias_found):
-    color = "#ff4d4d" if bias_found else "#4dffb0"
+    color = "#ff5c5c" if bias_found else "#3effc8"
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=round(value * 100),
-        number={"suffix": "%", "font": {"family": "Syne", "size": 30, "color": color}},
+        number={"suffix": "%", "font": {"family": "Fraunces", "size": 28, "color": color}},
         gauge={
             "axis": {"range": [0, 100], "tickwidth": 0, "tickcolor": "transparent",
-                     "tickfont": {"color": "#4a5268", "size": 9}},
+                     "tickfont": {"color": "#5a6478", "size": 9}},
             "bar": {"color": color, "thickness": 0.22},
-            "bgcolor": "#1a2030",
+            "bgcolor": "#1c222c",
             "borderwidth": 0,
             "steps": [
-                {"range": [0,  33],  "color": "rgba(77,255,176,0.05)"},
-                {"range": [33, 66],  "color": "rgba(255,184,77,0.05)"},
-                {"range": [66, 100], "color": "rgba(255,77,77,0.05)"},
+                {"range": [0, 33],  "color": "rgba(62,255,200,0.04)"},
+                {"range": [33, 66], "color": "rgba(255,184,48,0.04)"},
+                {"range": [66, 100],"color": "rgba(255,92,92,0.04)"},
             ],
             "threshold": {"line": {"color": color, "width": 2.5},
                           "thickness": 0.7, "value": value * 100},
@@ -741,94 +887,79 @@ def gauge_chart(value, bias_found):
     fig.update_layout(
         height=180, margin=dict(l=20, r=20, t=20, b=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font={"family": "Syne"},
+        font={"family": "Fraunces"},
     )
     return fig
 
-
-def radar_chart(all_reports: list):
-    """V3: Radar chart of bias dimension frequency across all reports."""
+def radar_chart(all_reports):
     dim_counts = {d: 0 for d in BIAS_DIMS}
     for r in all_reports:
         for bt in r.get("bias_types", []):
             for dim in BIAS_DIMS:
                 if dim.lower() in bt.lower():
                     dim_counts[dim] += 1
-
-    vals   = [dim_counts[d] for d in BIAS_DIMS]
-    labels = BIAS_DIMS
-
+    vals = [dim_counts[d] for d in BIAS_DIMS]
     fig = go.Figure(go.Scatterpolar(
-        r=vals + [vals[0]],
-        theta=labels + [labels[0]],
+        r=vals + [vals[0]], theta=BIAS_DIMS + [BIAS_DIMS[0]],
         fill="toself",
-        fillcolor="rgba(232,255,71,0.07)",
-        line=dict(color="#e8ff47", width=2),
-        marker=dict(color="#e8ff47", size=6),
+        fillcolor="rgba(198,241,53,0.06)",
+        line=dict(color="#c6f135", width=2),
+        marker=dict(color="#c6f135", size=6),
     ))
     fig.update_layout(
         polar=dict(
             bgcolor="rgba(0,0,0,0)",
-            radialaxis=dict(
-                visible=True, color="#4a5268",
-                gridcolor="rgba(255,255,255,0.05)",
-                tickfont=dict(family="DM Mono", size=9, color="#4a5268"),
-            ),
-            angularaxis=dict(
-                color="#8892aa",
-                gridcolor="rgba(255,255,255,0.05)",
-                tickfont=dict(family="DM Mono", size=10, color="#8892aa"),
-            ),
+            radialaxis=dict(visible=True, color="#5a6478",
+                            gridcolor="rgba(255,255,255,0.05)",
+                            tickfont=dict(family="JetBrains Mono", size=9, color="#5a6478")),
+            angularaxis=dict(color="#b8bfcc",
+                             gridcolor="rgba(255,255,255,0.05)",
+                             tickfont=dict(family="JetBrains Mono", size=9, color="#b8bfcc")),
         ),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        height=320,
-        margin=dict(l=50, r=50, t=30, b=30),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        height=300, margin=dict(l=50, r=50, t=30, b=30),
         showlegend=False,
     )
     return fig
 
-
-def pie_chart(bias_count, clean_count):
-    total = bias_count + clean_count or 2
+def pie_chart(bc, cc):
     fig = go.Figure(go.Pie(
         labels=["Bias Detected", "No Bias Found"],
-        values=[bias_count or 1, clean_count or 1],
+        values=[bc or 1, cc or 1],
         hole=0.68,
-        marker=dict(colors=["#ff4d4d", "#4dffb0"],
-                    line=dict(color="#080b12", width=3)),
-        textfont=dict(family="DM Mono", size=11),
+        marker=dict(colors=["#ff5c5c", "#3effc8"],
+                    line=dict(color="#0a0c0f", width=3)),
+        textfont=dict(family="JetBrains Mono", size=10),
         textinfo="percent",
         hovertemplate="%{label}: %{value}<extra></extra>",
     ))
+    total = bc + cc
     fig.add_annotation(
-        text=f"<b>{total}</b><br><span style='font-size:10px'>TOTAL</span>",
+        text=f"<b>{total}</b><br><span style='font-size:9px'>TOTAL</span>",
         x=0.5, y=0.5,
-        font=dict(family="Syne", size=20, color="#eef0f8"),
+        font=dict(family="Fraunces", size=20, color="#f0f2f7"),
         showarrow=False,
     )
     fig.update_layout(
         height=260, margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        showlegend=True,
-        legend=dict(font=dict(family="DM Mono", size=10, color="#8892aa"),
+        legend=dict(font=dict(family="JetBrains Mono", size=9, color="#b8bfcc"),
                     bgcolor="rgba(0,0,0,0)", orientation="h",
                     x=0.5, xanchor="center", y=-0.05),
     )
     return fig
 
-
 def bar_chart(all_types):
     if not all_types:
-        all_types = ["No data"]
+        return None
     counts = Counter(all_types)
-    labels, values = zip(*counts.most_common()) if counts else (["None"], [0])
-    colors = ["#ff4d4d", "#ffb84d", "#4d9fff", "#4dffb0", "#c084fc", "#f87171", "#fb923c"]
+    labels, values = zip(*counts.most_common())
+    colors = ["#ff5c5c", "#ffb830", "#60a5fa", "#3effc8", "#a78bfa", "#f87171", "#fb923c"]
     fig = go.Figure(go.Bar(
         x=list(values), y=list(labels), orientation="h",
         marker=dict(color=colors[:len(labels)], line=dict(width=0)),
         text=list(values),
-        textfont=dict(family="DM Mono", size=11, color="#eef0f8"),
+        textfont=dict(family="JetBrains Mono", size=10, color="#f0f2f7"),
         textposition="outside",
         hovertemplate="%{y}: %{x}<extra></extra>",
     ))
@@ -837,123 +968,57 @@ def bar_chart(all_types):
         margin=dict(l=10, r=40, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.04)",
-                   tickfont=dict(family="DM Mono", size=10, color="#4a5268"), zeroline=False),
-        yaxis=dict(tickfont=dict(family="DM Mono", size=10, color="#8892aa"),
+                   tickfont=dict(family="JetBrains Mono", size=9, color="#5a6478"), zeroline=False),
+        yaxis=dict(tickfont=dict(family="JetBrains Mono", size=9, color="#b8bfcc"),
                    gridcolor="rgba(0,0,0,0)"),
         bargap=0.38,
     )
     return fig
 
-
-def histogram_chart(scores):
-    if not scores:
-        scores = [0]
-    fig = go.Figure(go.Histogram(
-        x=[s * 100 for s in scores], nbinsx=10,
-        marker=dict(color="#e8ff47", opacity=0.7, line=dict(color="#080b12", width=1)),
-        hovertemplate="~%{x:.0f}%: %{y}<extra></extra>",
-    ))
-    fig.update_layout(
-        height=220, margin=dict(l=10, r=10, t=10, b=30),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(title=dict(text="Confidence %",
-                              font=dict(family="DM Mono", size=10, color="#4a5268")),
-                   tickfont=dict(family="DM Mono", size=10, color="#4a5268"),
-                   gridcolor="rgba(255,255,255,0.04)"),
-        yaxis=dict(tickfont=dict(family="DM Mono", size=10, color="#4a5268"),
-                   gridcolor="rgba(255,255,255,0.04)"),
-    )
-    return fig
-
-
-def timeline_chart(bias_flags):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=list(range(len(bias_flags))),
-        y=[1 if b else 0 for b in bias_flags],
-        mode="markers+lines",
-        marker=dict(color=["#ff4d4d" if b else "#4dffb0" for b in bias_flags],
-                    size=10, line=dict(color="#080b12", width=2)),
-        line=dict(color="rgba(255,255,255,0.07)", width=1.5),
-        hovertemplate="#%{x}: %{text}<extra></extra>",
-        text=["Bias" if b else "Clean" for b in bias_flags],
-    ))
-    fig.update_layout(
-        height=200, margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(tickvals=[0, 1], ticktext=["Clean", "Bias"],
-                   tickfont=dict(family="DM Mono", size=10, color="#4a5268"),
-                   gridcolor="rgba(255,255,255,0.04)"),
-        xaxis=dict(tickfont=dict(family="DM Mono", size=10, color="#4a5268"),
-                   gridcolor="rgba(255,255,255,0.04)"),
-    )
-    return fig
-
-
-# ─── Report builders ───────────────────────────
+def reports_to_csv(reports):
+    rows = []
+    for r in reports:
+        rows.append({
+            "id":                      r.get("id", ""),
+            "created_at":              (r.get("created_at") or "")[:16],
+            "bias_found":              r.get("bias_found", False),
+            "confidence_pct":          int(r.get("confidence_score", 0) * 100),
+            "bias_types":              "; ".join(r.get("bias_types", [])),
+            "affected_characteristic": r.get("affected_characteristic", ""),
+            "original_outcome":        r.get("original_outcome", ""),
+            "fair_outcome":            r.get("fair_outcome", ""),
+            "explanation":             r.get("explanation", ""),
+            "recommendations":         " | ".join(r.get("recommendations", [])),
+        })
+    return pd.DataFrame(rows).to_csv(index=False)
 
 def build_txt_report(report, text, dtype):
-    recs  = report.get("recommendations", [])
+    recs = report.get("recommendations", [])
     lines = [
-        "=" * 64, "     VERDICT WATCH V3 — BIAS ANALYSIS REPORT", "=" * 64,
+        "=" * 64, "  VERDICT WATCH V4 — BIAS ANALYSIS REPORT", "=" * 64,
         f"Generated : {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}",
         f"Type      : {dtype.upper()}",
         f"Report ID : {report.get('id', 'N/A')}", "",
+        f"Built for Google Solution Challenge 2026 — Build with AI", "",
         "── ORIGINAL DECISION TEXT ──", text, "",
-        "── VERDICT ─────────────────────────────────────────────────",
-        "BIAS DETECTED" if report.get("bias_found") else "NO BIAS FOUND",
+        "── VERDICT ──", "BIAS DETECTED" if report.get("bias_found") else "NO BIAS FOUND",
         f"Confidence: {int(report.get('confidence_score', 0) * 100)}%", "",
-        "── BIAS TYPES ──────────────────────────────────────────────",
+        "── BIAS TYPES ──",
         ", ".join(report.get("bias_types", [])) or "None detected", "",
-        "── CHARACTERISTIC AFFECTED ─────────────────────────────────",
+        "── CHARACTERISTIC AFFECTED ──",
         report.get("affected_characteristic", "N/A"), "",
-        "── ORIGINAL OUTCOME ────────────────────────────────────────",
-        report.get("original_outcome", "N/A"), "",
-        "── FAIR OUTCOME ────────────────────────────────────────────",
-        report.get("fair_outcome", "N/A"), "",
-        "── EXPLANATION ─────────────────────────────────────────────",
-        report.get("explanation", "N/A"), "",
-        "── NEXT STEPS ──────────────────────────────────────────────",
+        "── ORIGINAL OUTCOME ──", report.get("original_outcome", "N/A"), "",
+        "── FAIR OUTCOME ──", report.get("fair_outcome", "N/A"), "",
+        "── EXPLANATION ──", report.get("explanation", "N/A"), "",
+        "── NEXT STEPS ──",
     ]
     for i, r in enumerate(recs, 1):
         lines.append(f"  {i}. {r}")
     lines += ["", "=" * 64,
-              "  Verdict Watch V3  ·  Groq / Llama 3.3 70B  ·  Not legal advice",
+              "  Not legal advice. For educational purposes only.",
+              "  Powered by Groq Llama 3.3 70B + Google Gemini",
               "=" * 64]
     return "\n".join(lines)
-
-
-def build_compare_txt(r1, r2, t1, t2):
-    def fmt(r, t, lbl):
-        return [f"── Decision {lbl} ──────────────────────────────────────────",
-                f"Text    : {t[:140]}...",
-                f"Verdict : {'BIAS DETECTED' if r.get('bias_found') else 'NO BIAS FOUND'}",
-                f"Confidence: {int(r.get('confidence_score', 0) * 100)}%",
-                f"Bias Types: {', '.join(r.get('bias_types', [])) or 'None'}",
-                f"Fair Outcome: {r.get('fair_outcome', 'N/A')}", ""]
-    lines = ["=" * 64, "  VERDICT WATCH V3 — COMPARISON REPORT", "=" * 64,
-             f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ""]
-    lines += fmt(r1, t1, "A") + fmt(r2, t2, "B")
-    lines += ["=" * 64, "  Not legal advice.", "=" * 64]
-    return "\n".join(lines)
-
-
-def reports_to_csv(reports: list) -> str:
-    rows = []
-    for r in reports:
-        rows.append({
-            "id":                   r.get("id", ""),
-            "created_at":           (r.get("created_at") or "")[:16],
-            "bias_found":           r.get("bias_found", False),
-            "confidence_pct":       int(r.get("confidence_score", 0) * 100),
-            "bias_types":           "; ".join(r.get("bias_types", [])),
-            "affected_characteristic": r.get("affected_characteristic", ""),
-            "original_outcome":     r.get("original_outcome", ""),
-            "fair_outcome":         r.get("fair_outcome", ""),
-            "explanation":          r.get("explanation", ""),
-            "recommendations":      " | ".join(r.get("recommendations", [])),
-        })
-    return pd.DataFrame(rows).to_csv(index=False)
 
 
 # ─────────────────────────────────────────────
@@ -961,147 +1026,315 @@ def reports_to_csv(reports: list) -> str:
 # ─────────────────────────────────────────────
 
 with st.sidebar:
+    # Logo
     st.markdown(
-        '<div style="font-family:Syne,sans-serif; font-size:1.05rem; font-weight:700; color:#eef0f8;">'
-        '⚖️ Verdict Watch '
-        '<span style="background:#c084fc; color:#080b12; font-family:DM Mono,monospace; '
-        'font-size:0.55rem; padding:2px 6px; border-radius:3px; letter-spacing:1px; '
-        'vertical-align:middle; position:relative; top:-2px;">V3</span></div>'
-        '<div style="font-family:DM Sans,sans-serif; font-size:0.78rem; color:#4a5268; '
-        'line-height:1.5; margin-top:0.3rem; margin-bottom:1rem;">'
-        'AI-powered bias detection. No server required.</div>',
+        '<div style="font-family:Fraunces,serif; font-size:1.15rem; font-weight:900; '
+        'color:#f0f2f7; line-height:1;">⚖️ Verdict Watch</div>'
+        '<div style="font-family:JetBrains Mono,monospace; font-size:0.56rem; '
+        'letter-spacing:2px; text-transform:uppercase; color:#5a6478; margin-top:3px;">'
+        'V4 · Unbiased AI · GSC 2026</div>',
         unsafe_allow_html=True,
     )
 
-    # ── API Key status indicator
-    st.markdown("---")
-    if check_groq_key():
-        st.markdown(
-            '<div class="status-pill-ok">● GROQ KEY LOADED</div>',
-            unsafe_allow_html=True,
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── API Keys section
+    st.markdown('<div class="sec-label">API Keys</div>', unsafe_allow_html=True)
+
+    env_groq = os.getenv("GROQ_API_KEY", "")
+    if env_groq:
+        st.markdown('<div class="pill-ok">● GROQ CONNECTED</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="pill-warn">● GROQ KEY NEEDED</div>', unsafe_allow_html=True)
+        key_input = st.text_input(
+            "Groq API Key", label_visibility="collapsed",
+            placeholder="gsk_...", type="password", key="groq_key_input",
+            help="Get a free key at console.groq.com",
         )
+        if key_input:
+            st.session_state["groq_api_key"] = key_input
+            st.success("✓ Groq key saved")
+
+    st.markdown("<br style='margin-top:4px'>", unsafe_allow_html=True)
+
+    env_gemini = os.getenv("GEMINI_API_KEY", "")
+    gemini_connected = bool(env_gemini or st.session_state.get("gemini_api_key"))
+    if gemini_connected:
+        st.markdown('<div class="gemini-badge">🤖 GEMINI CONNECTED (Google AI)</div>',
+                    unsafe_allow_html=True)
     else:
         st.markdown(
-            '<div class="status-pill-err">● NO GROQ KEY FOUND</div>',
+            '<div style="font-family:JetBrains Mono,monospace; font-size:0.6rem; '
+            'letter-spacing:1px; color:#5a6478; margin-bottom:4px;">'
+            'GEMINI KEY (Optional — enables image OCR + plain-English explanations)</div>',
             unsafe_allow_html=True,
         )
-        st.markdown(
-            '<div style="font-family:DM Sans,sans-serif; font-size:0.78rem; color:#ff9090; '
-            'margin-top:0.5rem;">Add <code>GROQ_API_KEY=your_key</code> to a <code>.env</code> '
-            'file in the project root, then restart the app.</div>',
-            unsafe_allow_html=True,
+        gemini_input = st.text_input(
+            "Gemini API Key", label_visibility="collapsed",
+            placeholder="AIza...", type="password", key="gemini_key_input",
+            help="Get free key at aistudio.google.com — required for image upload",
         )
+        if gemini_input:
+            st.session_state["gemini_api_key"] = gemini_input
+            st.success("✓ Gemini key saved")
 
-    st.markdown("---")
-    st.markdown(
-        '<div style="font-family:DM Mono,monospace; font-size:0.6rem; letter-spacing:2.5px; '
-        'text-transform:uppercase; color:#4a5268; margin-bottom:0.5rem;">Quick Examples</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<hr style="border:none;border-top:1px solid rgba(255,255,255,0.07);margin:1rem 0">', unsafe_allow_html=True)
+
+    # ── Quick examples
+    st.markdown('<div class="sec-label">Quick Examples</div>', unsafe_allow_html=True)
     for ex in EXAMPLES:
-        if st.button(f"{ex['emoji']} {ex['tag']}", key=f"ex_{ex['type']}"):
+        if st.button(f"{ex['emoji']} {ex['tag']}", key=f"ex_{ex['type']}_{ex['tag'][:3]}"):
             st.session_state["prefill_text"] = ex["text"]
             st.session_state["prefill_type"] = ex["type"]
             st.rerun()
 
-    st.markdown("---")
-    st.markdown(
-        '<div style="font-family:DM Mono,monospace; font-size:0.6rem; letter-spacing:2.5px; '
-        'text-transform:uppercase; color:#4a5268; margin-bottom:0.6rem;">How It Works</div>',
-        unsafe_allow_html=True,
-    )
-    for n, t in [
-        ("01", "Paste any rejection or denial letter"),
-        ("02", "AI extracts the criteria used"),
-        ("03", "Scans for 7+ bias dimensions"),
-        ("04", "Generates what was fair"),
-        ("05", "Optional: generate appeal letter"),
-        ("06", "Shows actionable next steps"),
-    ]:
+    st.markdown('<hr style="border:none;border-top:1px solid rgba(255,255,255,0.07);margin:1rem 0">', unsafe_allow_html=True)
+
+    # ── How it works
+    st.markdown('<div class="sec-label">How It Works</div>', unsafe_allow_html=True)
+    steps = [
+        ("01", "Paste text OR upload a PDF/DOCX/image"),
+        ("02", "AI extracts the criteria used to decide"),
+        ("03", "Scans for 7 types of hidden bias"),
+        ("04", "Shows what the fair outcome should be"),
+        ("05", "Optional: generate formal appeal letter"),
+        ("06", "Download full report or export CSV"),
+    ]
+    for n, t in steps:
         st.markdown(
-            f'<div class="how-step"><div class="how-num">{n}</div>'
-            f'<div class="how-text">{t}</div></div>',
+            f'<div class="hw"><div class="hw-n">{n}</div><div class="hw-t">{t}</div></div>',
             unsafe_allow_html=True,
         )
+
+    st.markdown('<hr style="border:none;border-top:1px solid rgba(255,255,255,0.07);margin:1rem 0">', unsafe_allow_html=True)
+
+    # ── Hackathon compliance
+    st.markdown('<div class="sec-label">Hackathon Compliance</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="icard lime" style="font-family:JetBrains Mono,monospace;font-size:0.7rem;'
+        'color:#c6f135;line-height:1.8;">'
+        '✅ Google Gemini 1.5 Flash<br>✅ Build with AI theme<br>'
+        '✅ Unbiased AI Decisions<br>✅ Real-world social impact</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ─────────────────────────────────────────────
 # MAIN HEADER
 # ─────────────────────────────────────────────
 
-st.markdown(
-    '<div class="vw-wordmark">⚖ Verdict Watch'
-    '<span class="vw-v3-badge">V3</span></div>'
-    '<div class="vw-tagline">AI-powered bias detection for automated decisions</div>',
-    unsafe_allow_html=True,
-)
-st.markdown("<br>", unsafe_allow_html=True)
+hc1, hc2 = st.columns([3, 1])
+with hc1:
+    st.markdown(
+        '<div class="v4-hero">'
+        '<div class="v4-wordmark">⚖ Verdict Watch'
+        '<span class="v4-badge">V4</span></div>'
+        '<div class="v4-tagline">AI-powered bias detection for automated decisions</div>'
+        '<div style="margin-top:0.7rem;">'
+        '<span class="hackathon-badge">🏆 Google Solution Challenge 2026 · Build with AI · Unbiased AI Decision Making</span>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+with hc2:
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    if gemini_connected:
+        st.markdown(
+            '<div class="gemini-badge" style="float:right;">🤖 Powered by Gemini + Groq</div>',
+            unsafe_allow_html=True,
+        )
 
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
 
 tab_analyse, tab_dashboard, tab_history, tab_compare, tab_batch, tab_about = st.tabs([
-    "⚡ Analyse", "📊 Dashboard", "📋 History", "⚖️ Compare", "📦 Batch", "ℹ About",
+    "⚡  Analyse",
+    "📊  Dashboard",
+    "📋  History",
+    "⚖️  Compare",
+    "📦  Batch",
+    "ℹ  About",
 ])
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 # TAB 1 — ANALYSE
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 
 with tab_analyse:
+
     prefill_text = st.session_state.get("prefill_text", "")
     prefill_type = st.session_state.get("prefill_type", "job")
 
-    col_form, _ = st.columns([3, 1])
-    with col_form:
-        st.markdown('<div class="sec-label">Your Decision Letter</div>', unsafe_allow_html=True)
+    # ── Step indicator
+    uploaded_done = bool(st.session_state.get("extracted_text") or prefill_text)
+    analysed_done = bool(st.session_state.get("last_report"))
+
+    st.markdown(f"""
+    <div class="step-row">
+      <div class="step-item {'done' if uploaded_done else 'active'}">
+        <div class="step-num">{'✓' if uploaded_done else '1'}</div>
+        <div class="step-label">Input</div>
+      </div>
+      <div class="step-item {'done' if analysed_done else ('active' if uploaded_done else '')}">
+        <div class="step-num">{'✓' if analysed_done else '2'}</div>
+        <div class="step-label">Analyse</div>
+      </div>
+      <div class="step-item {'active' if analysed_done else ''}">
+        <div class="step-num">3</div>
+        <div class="step-label">Report</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Two-column input layout
+    col_left, col_right = st.columns([1.1, 1], gap="large")
+
+    with col_left:
+        # ────────── UPLOAD SECTION
+        st.markdown(
+            '<div class="sec-label">📎 Upload a Document <span style="color:#5a6478;font-size:0.58rem;">'
+            '(PDF · DOCX · TXT · PNG · JPG)</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="upload-hint">💡 Upload your rejection letter, triage result, '
+            'or denial notice and we\'ll extract the text automatically.</div>',
+            unsafe_allow_html=True,
+        )
+        uploaded_file = st.file_uploader(
+            "Upload document", label_visibility="collapsed",
+            type=ACCEPTED_FILE_TYPES, key="file_uploader",
+            help="Supported: PDF, Word doc, plain text, or an image of the document",
+        )
+
+        if uploaded_file:
+            with st.spinner(f"Extracting text from {uploaded_file.name}..."):
+                extracted = extract_text_from_file(uploaded_file)
+            if extracted.startswith("["):
+                st.warning(extracted)
+            else:
+                st.session_state["extracted_text"] = extracted
+                st.markdown('<div class="sec-label" style="margin-top:0.8rem;">Extracted Text Preview</div>',
+                            unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="extracted-preview">{extracted[:600]}{"..." if len(extracted)>600 else ""}</div>',
+                    unsafe_allow_html=True,
+                )
+                st.caption(f"✓ {len(extracted)} characters extracted from {uploaded_file.name}")
+
+        # ── Divider
+        st.markdown(
+            '<div style="display:flex;align-items:center;gap:0.8rem;margin:1.2rem 0;">'
+            '<div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>'
+            '<div style="font-family:JetBrains Mono,monospace;font-size:0.62rem;'
+            'color:#5a6478;letter-spacing:2px;">OR TYPE / PASTE</div>'
+            '<div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Text area
+        st.markdown('<div class="sec-label">✏️ Decision Text</div>', unsafe_allow_html=True)
+        default_val = st.session_state.get("extracted_text") or prefill_text
         decision_text = st.text_area(
-            "Decision letter", label_visibility="collapsed",
-            value=prefill_text, height=200, key="decision_input",
+            "Decision text", label_visibility="collapsed",
+            value=default_val, height=180, key="decision_input",
             placeholder=(
                 "Paste the rejection letter, loan denial, medical triage result, "
-                "or any automated decision here...\n\n"
-                "Tip: Use the sidebar examples to try instantly."
+                "or any automated decision here…\n\n"
+                "Or use the upload section above, or pick a quick example from the sidebar."
             ),
         )
-        st.markdown('<div class="sec-label" style="margin-top:0.8rem;">Decision Type</div>',
-                    unsafe_allow_html=True)
-        dc1, dc2 = st.columns([2, 1])
-        with dc1:
-            type_opts    = ["job", "loan", "medical", "university", "other"]
-            decision_type = st.selectbox(
-                "Type", label_visibility="collapsed", options=type_opts,
-                format_func=lambda x: TYPE_LABELS[x],
-                index=type_opts.index(prefill_type) if prefill_type in type_opts else 0,
-                key="decision_type",
-            )
-        with dc2:
-            n = len(decision_text.strip())
+
+        char_count = len(decision_text.strip())
+        st.markdown(
+            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.66rem;'
+            f'color:{"#3effc8" if char_count > 50 else "#ff5c5c"};margin-top:3px;">'
+            f'{char_count} characters · {"Ready ✓" if char_count > 50 else "Add more text"}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    with col_right:
+        # ── Decision type
+        st.markdown('<div class="sec-label">Decision Type</div>', unsafe_allow_html=True)
+        type_opts = ["job", "loan", "medical", "university", "other"]
+        decision_type = st.selectbox(
+            "Type", label_visibility="collapsed",
+            options=type_opts,
+            format_func=lambda x: TYPE_LABELS[x],
+            index=type_opts.index(prefill_type) if prefill_type in type_opts else 0,
+            key="decision_type",
+            help="Selecting the correct type helps the AI tailor its bias analysis",
+        )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── What we check for
+        st.markdown('<div class="sec-label">We check for these bias types</div>', unsafe_allow_html=True)
+        for label, icon in [
+            ("Gender / Parental Status", "👤"),
+            ("Age Discrimination", "🕐"),
+            ("Racial / Ethnic Bias", "🌍"),
+            ("Geographic Redlining", "📍"),
+            ("Socioeconomic Status", "💰"),
+            ("Language Discrimination", "🗣️"),
+            ("Insurance / Class Bias", "📋"),
+        ]:
             st.markdown(
-                f'<div style="padding-top:0.75rem; font-family:DM Mono,monospace; font-size:0.7rem; '
-                f'color:{"#4dffb0" if n > 50 else "#ff4d4d"};">'
-                f'{n} chars {"✓" if n > 50 else "— add more"}</div>',
+                f'<div style="display:flex;align-items:center;gap:8px;padding:5px 0;'
+                f'border-bottom:1px solid rgba(255,255,255,0.04);">'
+                f'<span style="font-size:0.9rem;">{icon}</span>'
+                f'<span style="font-family:Instrument Sans,sans-serif;font-size:0.82rem;'
+                f'color:#b8bfcc;">{label}</span></div>',
                 unsafe_allow_html=True,
             )
-        analyse_btn = st.button("⚡ Run Bias Analysis", key="analyse_btn")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── Clear extracted text button
+        if st.session_state.get("extracted_text"):
+            if st.button("🗑 Clear Uploaded Text", key="clear_extracted"):
+                st.session_state.pop("extracted_text", None)
+                st.rerun()
+
+    # ── Analyse button (full width)
+    st.markdown("<br>", unsafe_allow_html=True)
+    btn_col, _ = st.columns([1, 2])
+    with btn_col:
+        analyse_btn = st.button("⚡  Run Bias Analysis", key="analyse_btn")
+
+    # ─── RESULTS ───────────────────────────────────────────
 
     if analyse_btn:
         st.session_state.pop("prefill_text", None)
         st.session_state.pop("prefill_type", None)
+        st.session_state.pop("extracted_text", None)
+        st.session_state.pop("appeal_letter", None)
+
         if not decision_text.strip():
-            st.warning("⚠️ Please paste a decision text first.")
+            st.warning("⚠️ Please paste or upload a decision text first.")
         elif not check_groq_key():
-            st.error("❌ No Groq API key found. Add GROQ_API_KEY to your .env file and restart.")
+            st.error("❌ No Groq API key found. Add it in the sidebar or your .env file.")
         else:
             st.markdown('<hr class="divider">', unsafe_allow_html=True)
-            with st.spinner("Running 3-step AI analysis..."):
+            st.markdown('<div class="sec-label">Step 3 · Analysis Report</div>',
+                        unsafe_allow_html=True)
+
+            prog = st.progress(0, text="Step 1/3 · Extracting decision criteria…")
+            with st.spinner(""):
                 report, err = run_analysis(decision_text, decision_type)
+            prog.progress(100, text="Done ✓")
+            prog.empty()
 
             if err:
                 st.error(f"❌ {err}")
+                st.info("Make sure your Groq API key is valid and you have an internet connection.")
             elif report:
+                st.session_state["last_report"] = report
+                st.session_state["last_text"]   = decision_text
+
                 bias_found  = report.get("bias_found", False)
                 confidence  = report.get("confidence_score", 0.0)
                 bias_types  = report.get("bias_types", [])
@@ -1111,68 +1344,86 @@ with tab_analyse:
                 explanation = report.get("explanation", "")
                 recs        = report.get("recommendations", [])
 
-                # ── Verdict Banner
+                # ── Verdict banner
                 if bias_found:
                     st.markdown(
-                        '<div class="verdict-bias"><div class="v-icon">⚠️</div>'
+                        '<div class="verdict-bias">'
+                        '<div class="v-icon">⚠️</div>'
                         '<div class="v-label">BIAS DETECTED</div>'
-                        '<div class="v-sub">Decision shows discriminatory patterns</div></div>',
+                        '<div class="v-sub">This decision shows discriminatory patterns</div>'
+                        '</div>',
                         unsafe_allow_html=True,
                     )
                 else:
                     st.markdown(
-                        '<div class="verdict-clean"><div class="v-icon">✅</div>'
+                        '<div class="verdict-clean">'
+                        '<div class="v-icon">✅</div>'
                         '<div class="v-label">NO BIAS FOUND</div>'
-                        '<div class="v-sub">Decision appears free of discriminatory factors</div></div>',
+                        '<div class="v-sub">Decision appears free of discriminatory factors</div>'
+                        '</div>',
                         unsafe_allow_html=True,
                     )
+
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # ── Gauge + Meta + Outcomes
-                r1c, r2c, r3c = st.columns([1.2, 1.4, 1.4])
+                # ── Gemini plain-English summary (if available)
+                if bias_found and check_gemini_key() and GEMINI_SUPPORT:
+                    with st.spinner("Gemini generating plain-English explanation..."):
+                        gemini_explain = gemini_plain_explanation(report)
+                    if gemini_explain:
+                        st.markdown(
+                            '<div class="icard lime">'
+                            '<div class="ic-label">🤖 Gemini Simple Explanation (Google AI)</div>'
+                            f'<div class="ic-value">{gemini_explain}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown("<br>", unsafe_allow_html=True)
 
-                with r1c:
-                    st.markdown('<div class="sec-label">Confidence Score</div>', unsafe_allow_html=True)
+                # ── Score + Details + Outcomes
+                rc1, rc2, rc3 = st.columns([1.2, 1.4, 1.4])
+
+                with rc1:
+                    st.markdown('<div class="sec-label">Confidence Score</div>',
+                                unsafe_allow_html=True)
                     st.plotly_chart(gauge_chart(confidence, bias_found),
                                     use_container_width=True, config={"displayModeBar": False})
                     st.markdown(severity_badge(confidence, bias_found), unsafe_allow_html=True)
 
-                with r2c:
-                    st.markdown('<div class="sec-label">Bias Types Found</div>', unsafe_allow_html=True)
-                    st.markdown(chips_html(bias_types) if bias_types
-                                else '<span class="chip chip-green">None detected</span>',
+                with rc2:
+                    st.markdown('<div class="sec-label">Bias Types Detected</div>',
                                 unsafe_allow_html=True)
+                    st.markdown(
+                        chips_html(bias_types) if bias_types
+                        else '<span class="chip ch-teal">None detected ✓</span>',
+                        unsafe_allow_html=True,
+                    )
                     if affected:
                         st.markdown(
-                            f'<div style="margin-top:0.8rem;">'
+                            f'<div style="margin-top:0.9rem;">'
                             f'<div class="sec-label">Characteristic Affected</div>'
-                            f'<div style="font-family:DM Mono,monospace; font-size:0.88rem; '
-                            f'color:#ffb84d;">{affected}</div></div>',
+                            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.9rem;'
+                            f'color:#ffb830;">{affected}</div></div>',
                             unsafe_allow_html=True,
                         )
 
-                with r3c:
+                with rc3:
                     st.markdown(
-                        f'<div class="info-card red" style="margin-bottom:0.6rem;">'
+                        f'<div class="icard coral" style="margin-bottom:0.6rem;">'
                         f'<div class="ic-label">Original Decision</div>'
                         f'<div class="ic-value mono">{orig.upper()}</div></div>'
-                        f'<div class="info-card green">'
+                        f'<div class="icard teal">'
                         f'<div class="ic-label">Should Have Been</div>'
                         f'<div class="ic-value">{fair}</div></div>',
                         unsafe_allow_html=True,
                     )
 
-                # ── Bias Phrase Highlighter
+                # ── Bias phrase highlighter
                 if bias_types and decision_text.strip():
                     st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown('<div class="sec-label">🔍 Bias Phrase Highlighter</div>',
+                    st.markdown('<div class="sec-label">🔍 Bias Phrase Highlighter — Problematic words are highlighted</div>',
                                 unsafe_allow_html=True)
-                    highlighted = highlight_text(decision_text, bias_types)
                     st.markdown(
-                        f'<div class="highlight-box">{highlighted}</div>'
-                        f'<div style="font-family:DM Mono,monospace; font-size:0.62rem; '
-                        f'color:#4a5268; margin-top:0.4rem; letter-spacing:1px;">'
-                        f'HIGHLIGHTED WORDS ARE COMMON PROXIES FOR PROTECTED CHARACTERISTICS</div>',
+                        f'<div class="highlight-box">{highlight_text(decision_text, bias_types)}</div>',
                         unsafe_allow_html=True,
                     )
 
@@ -1182,62 +1433,9 @@ with tab_analyse:
                     st.markdown('<div class="sec-label">What Happened — Plain English</div>',
                                 unsafe_allow_html=True)
                     st.markdown(
-                        f'<div class="info-card amber">'
-                        f'<div class="ic-value">{explanation}</div></div>',
+                        f'<div class="icard amber"><div class="ic-value">{explanation}</div></div>',
                         unsafe_allow_html=True,
                     )
-
-                # ── Fairness Grade
-                grade, gcolor, gdesc = fairness_grade(confidence, bias_found)
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown('<div class="sec-label">🎓 Fairness Grade</div>', unsafe_allow_html=True)
-                gc1, gc2 = st.columns([1, 5])
-                with gc1:
-                    st.markdown(
-                        f'<div class="grade-badge" style="color:{gcolor}; border-color:{gcolor};">'
-                        f'{grade}</div>',
-                        unsafe_allow_html=True,
-                    )
-                with gc2:
-                    st.markdown(
-                        f'<div style="padding-top:0.6rem; font-family:DM Sans,sans-serif; '
-                        f'font-size:0.92rem; color:{gcolor}; font-weight:600;">{gdesc}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                # ── Sentence-level Bias Breakdown
-                if bias_types and decision_text.strip():
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown('<div class="sec-label">🔬 Sentence-Level Bias Breakdown</div>',
-                                unsafe_allow_html=True)
-                    flagged_sents = extract_bias_sentences(decision_text, bias_types)
-                    for item in flagged_sents:
-                        if item["bias_dims"]:
-                            dims_str = " · ".join(item["bias_dims"]).upper()
-                            st.markdown(
-                                f'<div class="sent-row flagged">{item["sentence"]}'
-                                f'<div class="sent-dims">⚑ {dims_str}</div></div>',
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.markdown(
-                                f'<div class="sent-row clean">{item["sentence"]}</div>',
-                                unsafe_allow_html=True,
-                            )
-
-                # ── Legal References
-                legal_refs = get_legal_refs(bias_types)
-                if legal_refs:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown('<div class="sec-label">⚖️ Relevant Laws & Protections</div>',
-                                unsafe_allow_html=True)
-                    for dim, ref in legal_refs:
-                        st.markdown(
-                            f'<div class="legal-card">'
-                            f'<div class="legal-dim">{dim} Bias</div>'
-                            f'<div class="legal-text">{ref}</div></div>',
-                            unsafe_allow_html=True,
-                        )
 
                 # ── Recommendations
                 if recs:
@@ -1252,71 +1450,41 @@ with tab_analyse:
                             unsafe_allow_html=True,
                         )
 
-                # ── Rebuttal Points Generator
+                # ── Appeals letter (only if bias found)
                 if bias_found:
                     st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown('<div class="sec-label">🗣️ Rebuttal Points Generator</div>',
-                                unsafe_allow_html=True)
-                    st.markdown(
-                        '<div style="font-family:DM Sans,sans-serif; font-size:0.85rem; '
-                        'color:#8892aa; margin-bottom:0.8rem;">AI-generated arguments you can '
-                        'use when challenging this decision verbally or in writing.</div>',
-                        unsafe_allow_html=True,
-                    )
-                    if st.button("🗣️ Generate Rebuttal Points", key="rebuttal_btn"):
-                        with st.spinner("Building your arguments..."):
-                            try:
-                                rb = generate_rebuttal_points(report, decision_text)
-                                st.session_state["rebuttal_points"] = rb
-                            except Exception as e:
-                                st.error(f"❌ {e}")
-                    if st.session_state.get("rebuttal_points"):
+                    with st.expander("✉️ Generate Formal Appeal Letter", expanded=False):
                         st.markdown(
-                            f'<div class="appeal-box">{st.session_state["rebuttal_points"]}</div>',
+                            '<div style="font-family:Instrument Sans,sans-serif;font-size:0.85rem;'
+                            'color:#b8bfcc;margin-bottom:0.8rem;">'
+                            'Generate a formal letter you can send to the decision-maker. '
+                            'Fill in the <strong>[PLACEHOLDERS]</strong> before sending. '
+                            '<em>Not legal advice.</em></div>',
                             unsafe_allow_html=True,
                         )
+                        if st.button("✉️ Draft Appeal Letter", key="appeal_btn"):
+                            with st.spinner("Drafting appeal letter..."):
+                                try:
+                                    letter = generate_appeal_letter(report, decision_text, decision_type)
+                                    st.session_state["appeal_letter"] = letter
+                                except Exception as e:
+                                    st.error(f"❌ {e}")
 
-                # ── V3: Appeals Letter Generator
-                if bias_found:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown(
-                        '<div class="sec-label">✉️ Appeals Letter Generator — New in V3</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(
-                        '<div style="font-family:DM Sans,sans-serif; font-size:0.85rem; '
-                        'color:#8892aa; margin-bottom:0.8rem;">Generate a formal appeal '
-                        'letter you can send to the decision-maker. Fill in the '
-                        '[PLACEHOLDERS] before sending.</div>',
-                        unsafe_allow_html=True,
-                    )
-                    if st.button("✉️ Generate Appeal Letter", key="appeal_btn"):
-                        with st.spinner("Drafting your appeal letter..."):
-                            try:
-                                letter = generate_appeal_letter(
-                                    report, decision_text, decision_type
+                        if st.session_state.get("appeal_letter"):
+                            letter = st.session_state["appeal_letter"]
+                            st.markdown(f'<div class="appeal-box">{letter}</div>',
+                                        unsafe_allow_html=True)
+                            dl_a, _ = st.columns([1, 2])
+                            with dl_a:
+                                st.download_button(
+                                    "📥 Download Appeal Letter (.txt)",
+                                    data=letter,
+                                    file_name=f"appeal_{report.get('id','')[:8]}.txt",
+                                    mime="text/plain",
+                                    key="dl_appeal",
                                 )
-                                st.session_state["appeal_letter"] = letter
-                            except Exception as e:
-                                st.error(f"❌ {e}")
 
-                    if st.session_state.get("appeal_letter"):
-                        letter = st.session_state["appeal_letter"]
-                        st.markdown(
-                            f'<div class="appeal-box">{letter}</div>',
-                            unsafe_allow_html=True,
-                        )
-                        al1, _ = st.columns([1, 2])
-                        with al1:
-                            st.download_button(
-                                "📥 Download Appeal Letter (.txt)",
-                                data=letter,
-                                file_name=f"appeal_letter_{report.get('id','')[:8]}.txt",
-                                mime="text/plain",
-                                key="dl_appeal",
-                            )
-
-                # ── Downloads
+                # ── Download
                 st.markdown("<br>", unsafe_allow_html=True)
                 dl1, _ = st.columns([1, 2])
                 with dl1:
@@ -1328,19 +1496,30 @@ with tab_analyse:
                         key="dl_report",
                     )
 
-                st.session_state["last_report"] = report
-                st.session_state["last_text"]   = decision_text
+                st.markdown(
+                    '<div style="font-family:JetBrains Mono,monospace;font-size:0.62rem;'
+                    'color:#5a6478;margin-top:0.5rem;">'
+                    '⚠ Not legal advice. For educational and awareness purposes only.</div>',
+                    unsafe_allow_html=True,
+                )
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 # TAB 2 — DASHBOARD
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 
 with tab_dashboard:
     hist = get_all_reports()
 
     if not hist:
-        st.info("No analyses yet. Run your first analysis in the Analyse tab.")
+        st.markdown(
+            '<div class="empty-state">'
+            '<div class="empty-icon">📊</div>'
+            '<div class="empty-title">No data yet</div>'
+            '<div class="empty-sub">Run your first analysis to see stats here.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
     else:
         bias_reps  = [r for r in hist if r.get("bias_found")]
         clean_reps = [r for r in hist if not r.get("bias_found")]
@@ -1352,49 +1531,37 @@ with tab_dashboard:
         top_bias   = Counter(all_types).most_common(1)[0][0] if all_types else "N/A"
 
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Analyses",  len(hist))
-        m2.metric("Bias Rate",       f"{bias_rate:.0f}%")
-        m3.metric("Avg Confidence",  f"{avg_conf:.0f}%")
-        m4.metric("Top Bias Type",   top_bias)
+        m1.metric("Total Analyses", len(hist))
+        m2.metric("Bias Rate",      f"{bias_rate:.0f}%")
+        m3.metric("Avg Confidence", f"{avg_conf:.0f}%")
+        m4.metric("Top Bias Type",  top_bias)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        c1, c2 = st.columns(2)
-        with c1:
+        dc1, dc2 = st.columns(2)
+        with dc1:
             st.markdown('<div class="sec-label">Verdicts Distribution</div>',
                         unsafe_allow_html=True)
             st.plotly_chart(pie_chart(len(bias_reps), len(clean_reps)),
                             use_container_width=True, config={"displayModeBar": False})
-        with c2:
+        with dc2:
             st.markdown('<div class="sec-label">Bias Types Frequency</div>',
                         unsafe_allow_html=True)
-            if all_types:
-                st.plotly_chart(bar_chart(all_types),
-                                use_container_width=True, config={"displayModeBar": False})
+            bc = bar_chart(all_types)
+            if bc:
+                st.plotly_chart(bc, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.info("No bias types detected yet.")
 
-        c3, c4 = st.columns(2)
-        with c3:
-            st.markdown('<div class="sec-label">Confidence Distribution</div>',
-                        unsafe_allow_html=True)
-            st.plotly_chart(histogram_chart(scores),
-                            use_container_width=True, config={"displayModeBar": False})
-        with c4:
-            st.markdown('<div class="sec-label">Analysis Timeline</div>',
-                        unsafe_allow_html=True)
-            st.plotly_chart(timeline_chart(bflags),
-                            use_container_width=True, config={"displayModeBar": False})
-
-        # ── V3: Bias Radar Chart
         st.markdown("<br>", unsafe_allow_html=True)
-        rad_col, char_col = st.columns([1, 1])
-        with rad_col:
-            st.markdown('<div class="sec-label">🕸 Bias Dimension Radar — New in V3</div>',
+
+        radc, charc = st.columns(2)
+        with radc:
+            st.markdown('<div class="sec-label">Bias Dimension Radar</div>',
                         unsafe_allow_html=True)
-            st.plotly_chart(radar_chart(hist),
-                            use_container_width=True, config={"displayModeBar": False})
-        with char_col:
+            st.plotly_chart(radar_chart(hist), use_container_width=True,
+                            config={"displayModeBar": False})
+        with charc:
             st.markdown('<div class="sec-label">Affected Characteristics</div>',
                         unsafe_allow_html=True)
             chars = [r.get("affected_characteristic") for r in hist
@@ -1402,7 +1569,7 @@ with tab_dashboard:
             if chars:
                 cdf = pd.DataFrame([
                     {"Characteristic": k, "Count": v,
-                     "% of Analyses": f"{v / len(hist) * 100:.0f}%"}
+                     "% of Total": f"{v / len(hist) * 100:.0f}%"}
                     for k, v in Counter(chars).most_common()
                 ])
                 st.dataframe(cdf, use_container_width=True, hide_index=True)
@@ -1410,105 +1577,102 @@ with tab_dashboard:
                 st.info("No characteristic data yet.")
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 # TAB 3 — HISTORY
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 
 with tab_history:
     hist = get_all_reports()
 
     if not hist:
-        st.info("No analyses yet. Head to the Analyse tab to get started.")
+        st.markdown(
+            '<div class="empty-state">'
+            '<div class="empty-icon">📋</div>'
+            '<div class="empty-title">No past analyses</div>'
+            '<div class="empty-sub">Your analysis history will appear here.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
     else:
         f1, f2, f3 = st.columns([2, 1, 1])
         with f1:
             search_q = st.text_input(
                 "search", label_visibility="collapsed",
-                placeholder="Search by characteristic or bias type...",
+                placeholder="🔍  Search by characteristic or bias type…",
                 key="history_search",
             )
         with f2:
             filt_v = st.selectbox("verdict", ["All", "Bias Detected", "No Bias"],
                                    label_visibility="collapsed", key="history_filter")
         with f3:
-            sort_by = st.selectbox(
-                "sort",
-                ["Newest First", "Oldest First", "Highest Confidence", "Lowest Confidence"],
-                label_visibility="collapsed", key="history_sort",
-            )
+            sort_by = st.selectbox("sort", ["Newest First", "Oldest First",
+                                            "Highest Confidence", "Lowest Confidence"],
+                                   label_visibility="collapsed", key="history_sort")
 
         filtered = hist[:]
-        if filt_v == "Bias Detected":
-            filtered = [r for r in filtered if r.get("bias_found")]
-        elif filt_v == "No Bias":
-            filtered = [r for r in filtered if not r.get("bias_found")]
+        if filt_v == "Bias Detected": filtered = [r for r in filtered if r.get("bias_found")]
+        elif filt_v == "No Bias":     filtered = [r for r in filtered if not r.get("bias_found")]
         if search_q:
             sq = search_q.lower()
             filtered = [r for r in filtered
                         if sq in (r.get("affected_characteristic") or "").lower()
                         or any(sq in bt.lower() for bt in r.get("bias_types", []))]
-        if sort_by == "Newest First":
-            filtered.sort(key=lambda r: r.get("created_at") or "", reverse=True)
-        elif sort_by == "Oldest First":
-            filtered.sort(key=lambda r: r.get("created_at") or "")
-        elif sort_by == "Highest Confidence":
-            filtered.sort(key=lambda r: r.get("confidence_score", 0), reverse=True)
-        else:
-            filtered.sort(key=lambda r: r.get("confidence_score", 0))
+        if   sort_by == "Newest First":       filtered.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+        elif sort_by == "Oldest First":       filtered.sort(key=lambda r: r.get("created_at") or "")
+        elif sort_by == "Highest Confidence": filtered.sort(key=lambda r: r.get("confidence_score", 0), reverse=True)
+        else:                                 filtered.sort(key=lambda r: r.get("confidence_score", 0))
 
-        hdr1, hdr2 = st.columns([3, 1])
-        with hdr1:
+        hh1, hh2 = st.columns([3, 1])
+        with hh1:
             st.markdown(
-                f'<div style="font-family:DM Mono,monospace; font-size:0.68rem; '
-                f'color:#4a5268; margin-bottom:1rem; letter-spacing:1px;">'
-                f'SHOWING {len(filtered)} OF {len(hist)}</div>',
+                f'<div style="font-family:JetBrains Mono,monospace;font-size:0.65rem;'
+                f'color:#5a6478;margin-bottom:0.8rem;">Showing {len(filtered)} of {len(hist)}</div>',
                 unsafe_allow_html=True,
             )
-        with hdr2:
-            # ── V3: CSV Export
+        with hh2:
             st.download_button(
                 "📥 Export CSV",
                 data=reports_to_csv(filtered),
                 file_name=f"verdict_history_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                key="csv_export",
+                mime="text/csv", key="csv_export",
             )
 
         for r in filtered:
-            bias     = r.get("bias_found", False)
-            conf     = int(r.get("confidence_score", 0) * 100)
+            bias    = r.get("bias_found", False)
+            conf    = int(r.get("confidence_score", 0) * 100)
             affected = r.get("affected_characteristic") or "—"
-            b_types  = r.get("bias_types", [])
-            created  = (r.get("created_at") or "")[:16].replace("T", " ")
+            b_types = r.get("bias_types", [])
+            created = (r.get("created_at") or "")[:16].replace("T", " ")
+            icon    = "⚠️" if bias else "✅"
 
             with st.expander(
-                f'{"⚠️ BIAS" if bias else "✅ CLEAN"}  ·  {conf}%  ·  {affected}  ·  {created}',
+                f"{icon}  {'BIAS' if bias else 'CLEAN'}  ·  {conf}% confidence  ·  {affected}  ·  {created}",
                 expanded=False,
             ):
                 ec1, ec2 = st.columns(2)
                 with ec1:
                     st.markdown(
-                        f'<div class="info-card {"red" if bias else "green"}">'
+                        f'<div class="icard {"coral" if bias else "teal"}">'
                         f'<div class="ic-label">Verdict</div>'
                         f'<div class="ic-value mono">{"⚠ BIAS DETECTED" if bias else "✓ NO BIAS FOUND"}</div></div>'
-                        f'<div class="info-card blue" style="margin-top:0.5rem;">'
+                        f'<div class="icard blue" style="margin-top:0.5rem;">'
                         f'<div class="ic-label">Original Outcome</div>'
                         f'<div class="ic-value mono">{(r.get("original_outcome") or "N/A").upper()}</div></div>',
                         unsafe_allow_html=True,
                     )
                 with ec2:
                     st.markdown(
-                        f'<div class="info-card amber">'
+                        f'<div class="icard amber">'
                         f'<div class="ic-label">Bias Types</div>'
                         f'<div class="ic-value">{chips_html(b_types) if b_types else "None"}</div></div>'
-                        f'<div class="info-card green" style="margin-top:0.5rem;">'
+                        f'<div class="icard teal" style="margin-top:0.5rem;">'
                         f'<div class="ic-label">Fair Outcome</div>'
                         f'<div class="ic-value">{r.get("fair_outcome") or "N/A"}</div></div>',
                         unsafe_allow_html=True,
                     )
                 if r.get("explanation"):
                     st.markdown(
-                        f'<div class="info-card amber" style="margin-top:0.5rem;">'
+                        f'<div class="icard amber" style="margin-top:0.5rem;">'
                         f'<div class="ic-label">Explanation</div>'
                         f'<div class="ic-value" style="font-size:0.88rem;">{r["explanation"]}</div></div>',
                         unsafe_allow_html=True,
@@ -1526,44 +1690,46 @@ with tab_history:
                 st.caption(f"Report ID: {r.get('id', 'N/A')}")
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 # TAB 4 — COMPARE
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 
 with tab_compare:
     st.markdown(
-        '<div style="font-family:DM Sans,sans-serif; font-size:0.93rem; '
-        'color:#8892aa; margin-bottom:1.2rem;">'
-        'Analyse two decisions side-by-side and compare bias verdicts, '
-        'confidence, and fair outcomes.</div>',
+        '<div style="font-family:Instrument Sans,sans-serif;font-size:0.92rem;'
+        'color:#b8bfcc;margin-bottom:1.3rem;">'
+        'Compare two decisions side-by-side to see which is more biased, '
+        'and get a comparative verdict.</div>',
         unsafe_allow_html=True,
     )
 
-    cc1, cc2 = st.columns(2)
+    cc1, cc2 = st.columns(2, gap="large")
     with cc1:
-        st.markdown('<div class="compare-header">Decision A</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cmp-header">Decision A</div>', unsafe_allow_html=True)
         cmp_text1 = st.text_area("Text A", height=150, label_visibility="collapsed",
-                                  placeholder="Paste first decision here...", key="cmp1")
-        cmp_type1 = st.selectbox("Type A", ["job", "loan", "medical", "university", "other"],
+                                  placeholder="Paste first decision here…", key="cmp1")
+        cmp_type1 = st.selectbox("Type A", ["job","loan","medical","university","other"],
                                   format_func=lambda x: TYPE_LABELS[x],
                                   label_visibility="collapsed", key="cmp_type1")
     with cc2:
-        st.markdown('<div class="compare-header">Decision B</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cmp-header">Decision B</div>', unsafe_allow_html=True)
         cmp_text2 = st.text_area("Text B", height=150, label_visibility="collapsed",
-                                  placeholder="Paste second decision here...", key="cmp2")
-        cmp_type2 = st.selectbox("Type B", ["job", "loan", "medical", "university", "other"],
+                                  placeholder="Paste second decision here…", key="cmp2")
+        cmp_type2 = st.selectbox("Type B", ["job","loan","medical","university","other"],
                                   format_func=lambda x: TYPE_LABELS[x],
                                   label_visibility="collapsed", key="cmp_type2")
 
-    cmp_btn = st.button("⚡ Compare Both Decisions", key="compare_btn")
+    btn_c, _ = st.columns([1, 2])
+    with btn_c:
+        cmp_btn = st.button("⚡  Compare Both Decisions", key="compare_btn")
 
     if cmp_btn:
         if not cmp_text1.strip() or not cmp_text2.strip():
             st.warning("⚠️ Paste text for both Decision A and B.")
         elif not check_groq_key():
-            st.error("❌ No Groq API key found. Add GROQ_API_KEY to your .env file and restart.")
+            st.error("❌ No Groq API key.")
         else:
-            with st.spinner("Analysing both decisions..."):
+            with st.spinner("Analysing both decisions…"):
                 r1, e1 = run_analysis(cmp_text1, cmp_type1)
                 r2, e2 = run_analysis(cmp_text2, cmp_type2)
 
@@ -1572,9 +1738,8 @@ with tab_compare:
 
             if r1 and r2:
                 st.markdown('<hr class="divider">', unsafe_allow_html=True)
-                v1c, v2c = st.columns(2)
-
-                for col, r, lbl in [(v1c, r1, "A"), (v2c, r2, "B")]:
+                v1, v2 = st.columns(2, gap="large")
+                for col, r, lbl in [(v1, r1, "A"), (v2, r2, "B")]:
                     with col:
                         bias = r.get("bias_found", False)
                         conf = r.get("confidence_score", 0)
@@ -1585,34 +1750,28 @@ with tab_compare:
                             f'<div class="v-sub">{"BIAS DETECTED" if bias else "NO BIAS FOUND"}</div></div>',
                             unsafe_allow_html=True,
                         )
-                        st.plotly_chart(gauge_chart(conf, bias),
-                                        use_container_width=True, config={"displayModeBar": False})
+                        st.plotly_chart(gauge_chart(conf, bias), use_container_width=True,
+                                        config={"displayModeBar": False})
                         st.markdown(
                             chips_html(r.get("bias_types", [])) + " " + severity_badge(conf, bias),
                             unsafe_allow_html=True,
                         )
                         affected = r.get("affected_characteristic") or "—"
                         st.markdown(
-                            f'<div style="font-family:DM Mono,monospace; font-size:0.8rem; '
-                            f'color:#ffb84d; margin-top:0.5rem;">Affected: {affected}</div>',
-                            unsafe_allow_html=True,
-                        )
-                        st.markdown(
-                            f'<div class="info-card green" style="margin-top:0.8rem;">'
+                            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.78rem;'
+                            f'color:#ffb830;margin-top:0.5rem;">Affected: {affected}</div>'
+                            f'<div class="icard teal" style="margin-top:0.8rem;">'
                             f'<div class="ic-label">Fair Outcome</div>'
                             f'<div class="ic-value">{r.get("fair_outcome") or "N/A"}</div></div>',
                             unsafe_allow_html=True,
                         )
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown('<div class="sec-label">Comparison Summary</div>',
-                            unsafe_allow_html=True)
                 b1, b2   = r1.get("bias_found"), r2.get("bias_found")
                 c1v, c2v = r1.get("confidence_score", 0), r2.get("confidence_score", 0)
                 if b1 and b2:
                     winner  = "A" if c1v >= c2v else "B"
-                    summary = (f"Both decisions show bias. Decision {winner} has higher "
-                               f"confidence ({int(max(c1v, c2v) * 100)}%).")
+                    summary = f"Both decisions show bias. Decision {winner} has higher confidence ({int(max(c1v,c2v)*100)}%)."
                 elif b1:
                     summary = "Decision A shows bias; Decision B appears fair."
                 elif b2:
@@ -1620,38 +1779,28 @@ with tab_compare:
                 else:
                     summary = "Neither decision shows clear discriminatory patterns."
                 st.markdown(
-                    f'<div class="info-card blue"><div class="ic-value">{summary}</div></div>',
+                    f'<div class="icard blue"><div class="ic-label">Comparison Summary</div>'
+                    f'<div class="ic-value">{summary}</div></div>',
                     unsafe_allow_html=True,
                 )
 
-                dl1, _ = st.columns([1, 2])
-                with dl1:
-                    st.download_button(
-                        "📥 Download Comparison Report (.txt)",
-                        data=build_compare_txt(r1, r2, cmp_text1, cmp_text2),
-                        file_name=f"verdict_compare_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-                        mime="text/plain",
-                    )
 
-
-# ═══════════════════════════════════════════════
-# TAB 5 — BATCH ANALYSIS  (New in V3)
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
+# TAB 5 — BATCH
+# ═══════════════════════════════════════════════════════════
 
 with tab_batch:
     st.markdown(
-        '<div style="font-family:DM Sans,sans-serif; font-size:0.93rem; '
-        'color:#8892aa; margin-bottom:1.2rem;">'
-        'Analyse multiple decisions at once. Separate each decision with '
-        '<code style="background:rgba(255,255,255,0.05); padding:1px 6px; '
-        'border-radius:4px; font-family:DM Mono,monospace;">---</code> '
-        'on its own line.</div>',
+        '<div style="font-family:Instrument Sans,sans-serif;font-size:0.92rem;'
+        'color:#b8bfcc;margin-bottom:0.5rem;">'
+        'Analyse up to 10 decisions at once. Separate each with '
+        '<code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;'
+        'font-family:JetBrains Mono,monospace;">---</code> on its own line.</div>',
         unsafe_allow_html=True,
     )
 
     batch_text = st.text_area(
-        "Batch decisions", height=280, label_visibility="collapsed",
-        key="batch_input",
+        "Batch", height=260, label_visibility="collapsed", key="batch_input",
         placeholder=(
             "Paste your first decision here...\n---\n"
             "Paste your second decision here...\n---\n"
@@ -1661,108 +1810,90 @@ with tab_batch:
     bc1, bc2 = st.columns([1, 1])
     with bc1:
         batch_type = st.selectbox(
-            "Batch type (applies to all)",
-            ["job", "loan", "medical", "university", "other"],
+            "Batch type", ["job","loan","medical","university","other"],
             format_func=lambda x: TYPE_LABELS[x],
-            label_visibility="collapsed",
-            key="batch_type",
+            label_visibility="collapsed", key="batch_type",
         )
     with bc2:
-        batch_btn = st.button("📦 Run Batch Analysis", key="batch_run")
+        batch_btn = st.button("📦  Run Batch Analysis", key="batch_run")
 
     if batch_btn:
         raw_blocks = [b.strip() for b in batch_text.split("---") if b.strip()]
         if not raw_blocks:
             st.warning("⚠️ No decisions found. Separate them with --- on its own line.")
         elif not check_groq_key():
-            st.error("❌ No Groq API key found. Add GROQ_API_KEY to your .env file and restart.")
+            st.error("❌ No Groq API key.")
         elif len(raw_blocks) > 10:
-            st.warning("⚠️ Batch limit is 10 decisions at once.")
+            st.warning("⚠️ Max 10 decisions per batch. Please split into smaller batches.")
         else:
             progress = st.progress(0)
             results  = []
             for i, block in enumerate(raw_blocks):
-                with st.spinner(f"Analysing decision {i + 1} of {len(raw_blocks)}..."):
+                with st.spinner(f"Analysing decision {i+1} of {len(raw_blocks)}…"):
                     rep, err = run_analysis(block, batch_type)
                     results.append({"text": block, "report": rep, "error": err})
                 progress.progress((i + 1) / len(raw_blocks))
             progress.empty()
 
             st.markdown('<hr class="divider">', unsafe_allow_html=True)
-            st.markdown(f'<div class="sec-label">Batch Results — {len(results)} decisions</div>',
-                        unsafe_allow_html=True)
 
-            # Summary row
-            bias_count  = sum(1 for r in results if r["report"] and r["report"].get("bias_found"))
-            clean_count = sum(1 for r in results if r["report"] and not r["report"].get("bias_found"))
-            err_count   = sum(1 for r in results if r["error"])
+            bias_c  = sum(1 for r in results if r["report"] and r["report"].get("bias_found"))
+            clean_c = sum(1 for r in results if r["report"] and not r["report"].get("bias_found"))
+            err_c   = sum(1 for r in results if r["error"])
 
             sm1, sm2, sm3 = st.columns(3)
-            sm1.metric("Bias Detected", bias_count)
-            sm2.metric("No Bias Found", clean_count)
-            sm3.metric("Errors",        err_count)
+            sm1.metric("Bias Detected", bias_c)
+            sm2.metric("No Bias Found", clean_c)
+            sm3.metric("Errors",        err_c)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Results table
             table_rows = []
             for i, res in enumerate(results, 1):
                 rep   = res["report"]
                 error = res["error"]
                 if error:
-                    table_rows.append({
-                        "#":           i,
-                        "Verdict":     "ERROR",
-                        "Confidence":  "—",
-                        "Bias Types":  error[:60],
-                        "Affected":    "—",
-                        "Fair Outcome": "—",
-                    })
+                    table_rows.append({"#": i, "Verdict": "ERROR", "Confidence": "—",
+                                       "Bias Types": error[:60], "Affected": "—", "Fair Outcome": "—"})
                 elif rep:
                     table_rows.append({
                         "#":           i,
                         "Verdict":     "⚠ BIAS" if rep.get("bias_found") else "✓ CLEAN",
-                        "Confidence":  f"{int(rep.get('confidence_score', 0) * 100)}%",
+                        "Confidence":  f"{int(rep.get('confidence_score',0)*100)}%",
                         "Bias Types":  ", ".join(rep.get("bias_types", [])) or "None",
                         "Affected":    rep.get("affected_characteristic") or "—",
                         "Fair Outcome": rep.get("fair_outcome") or "—",
                     })
 
             if table_rows:
-                df = pd.DataFrame(table_rows)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
 
-            # Download CSV
-            all_batch_reports = [r["report"] for r in results if r["report"]]
-            if all_batch_reports:
+            all_batch = [r["report"] for r in results if r["report"]]
+            if all_batch:
                 dl1, _ = st.columns([1, 2])
                 with dl1:
                     st.download_button(
-                        "📥 Download Batch Results (.csv)",
-                        data=reports_to_csv(all_batch_reports),
+                        "📥 Download Batch CSV",
+                        data=reports_to_csv(all_batch),
                         file_name=f"verdict_batch_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv",
-                        key="batch_csv",
+                        mime="text/csv", key="batch_csv",
                     )
 
-            # Detail expanders
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown('<div class="sec-label">Detailed Results</div>', unsafe_allow_html=True)
             for i, res in enumerate(results, 1):
                 rep   = res["report"]
                 error = res["error"]
-                label = f"Decision {i}"
-                if error:
-                    label += " — ERROR"
+                lbl   = f"Decision {i}"
+                if error:  lbl += " — ERROR"
                 elif rep:
                     bias = rep.get("bias_found", False)
                     conf = int(rep.get("confidence_score", 0) * 100)
-                    label += f" — {'⚠ BIAS' if bias else '✓ CLEAN'} ({conf}%)"
-
-                with st.expander(label, expanded=False):
+                    lbl += f" — {'⚠ BIAS' if bias else '✓ CLEAN'} ({conf}%)"
+                with st.expander(lbl, expanded=False):
                     st.markdown(
-                        f'<div class="info-card blue"><div class="ic-label">Decision Text</div>'
-                        f'<div class="ic-value" style="font-size:0.85rem;">{res["text"]}</div></div>',
+                        f'<div class="icard blue"><div class="ic-label">Decision Text</div>'
+                        f'<div class="ic-value" style="font-size:0.85rem;">{res["text"][:400]}{"..." if len(res["text"])>400 else ""}</div></div>',
                         unsafe_allow_html=True,
                     )
                     if error:
@@ -1771,115 +1902,144 @@ with tab_batch:
                         bias  = rep.get("bias_found", False)
                         btyps = rep.get("bias_types", [])
                         st.markdown(
-                            f'<div class="info-card {"red" if bias else "green"}" '
-                            f'style="margin-top:0.5rem;">'
+                            f'<div class="icard {"coral" if bias else "teal"}" style="margin-top:0.5rem;">'
                             f'<div class="ic-label">Verdict</div>'
                             f'<div class="ic-value mono">{"⚠ BIAS DETECTED" if bias else "✓ NO BIAS FOUND"}</div></div>'
-                            f'<div class="info-card amber" style="margin-top:0.5rem;">'
+                            f'<div class="icard amber" style="margin-top:0.5rem;">'
                             f'<div class="ic-label">Bias Types</div>'
                             f'<div class="ic-value">{chips_html(btyps) if btyps else "None"}</div></div>'
-                            f'<div class="info-card green" style="margin-top:0.5rem;">'
+                            f'<div class="icard teal" style="margin-top:0.5rem;">'
                             f'<div class="ic-label">Fair Outcome</div>'
                             f'<div class="ic-value">{rep.get("fair_outcome") or "N/A"}</div></div>',
                             unsafe_allow_html=True,
                         )
-                        if rep.get("explanation"):
-                            st.markdown(
-                                f'<div class="info-card amber" style="margin-top:0.5rem;">'
-                                f'<div class="ic-label">Explanation</div>'
-                                f'<div class="ic-value" style="font-size:0.88rem;">'
-                                f'{rep["explanation"]}</div></div>',
-                                unsafe_allow_html=True,
-                            )
 
 
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 # TAB 6 — ABOUT
-# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 
 with tab_about:
-    ab1, ab2 = st.columns([1.6, 1])
+    ab1, ab2 = st.columns([1.5, 1], gap="large")
 
     with ab1:
         st.markdown(
-            '<div style="font-family:Syne,sans-serif; font-size:1.5rem; font-weight:800; '
-            'color:#eef0f8; margin-bottom:0.5rem;">What is Verdict Watch?</div>'
-            '<div style="font-family:DM Sans,sans-serif; font-size:0.93rem; '
-            'color:#8892aa; line-height:1.8; margin-bottom:1.5rem;">'
-            'Verdict Watch analyses automated decisions — job rejections, loan denials, '
-            'medical triage, university admissions — for hidden bias against protected '
-            'characteristics. A 3-step AI pipeline powered by Groq and Llama 3.3 70B '
-            'extracts criteria, detects discriminatory patterns, and generates what the '
-            'fair outcome should have been.'
-            '</div>',
+            '<div style="font-family:Fraunces,serif;font-size:1.6rem;font-weight:900;'
+            'color:#f0f2f7;margin-bottom:0.6rem;">What is Verdict Watch?</div>'
+            '<div style="font-family:Instrument Sans,sans-serif;font-size:0.92rem;'
+            'color:#b8bfcc;line-height:1.85;margin-bottom:1.5rem;">'
+            'Verdict Watch is an AI-powered tool that analyses automated decisions — '
+            'job rejections, loan denials, medical triage, university admissions — '
+            'for hidden bias against protected characteristics.<br><br>'
+            'Built for the <strong style="color:#c6f135;">Google Solution Challenge 2026</strong> '
+            'under the <strong style="color:#c6f135;">Unbiased AI Decision Making</strong> '
+            'problem statement. It uses a 3-step AI pipeline powered by '
+            '<strong>Groq Llama 3.3 70B</strong> and <strong>Google Gemini 1.5 Flash</strong> '
+            'to extract criteria, detect discriminatory patterns, and generate what the '
+            'fair outcome should have been.</div>',
             unsafe_allow_html=True,
         )
 
-        st.markdown('<div class="sec-label">Bias Types Detected</div>',
+        st.markdown('<div class="sec-label">Problem Statement Alignment</div>',
                     unsafe_allow_html=True)
+        align_points = [
+            ("Pre-model audit",    "Analyses what criteria were used before producing bias verdict"),
+            ("Post-decision audit","Evaluates the decision for discriminatory patterns"),
+            ("AI Governance layer","Explains how AI reached its bias detection conclusion"),
+            ("Explainability",     "Shows which words/phrases triggered the bias detection"),
+            ("Fairness metrics",   "Confidence score + severity rating + bias type classification"),
+            ("Retroactive correction", "Generates what the fair outcome should have been"),
+        ]
+        for name, desc in align_points:
+            st.markdown(
+                f'<div class="feat-card">'
+                f'<div class="feat-title">✅ {name}</div>'
+                f'<div class="feat-desc">{desc}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="sec-label">Bias Types Detected</div>', unsafe_allow_html=True)
         bias_info = [
-            ("Gender Bias",        "Decisions influenced by gender, name, or parental status"),
-            ("Age Discrimination",  "Unfair weighting of age group or seniority proxies"),
-            ("Racial / Ethnic Bias","Name-based or origin-based ethnic profiling"),
-            ("Geographic Redlining","Residential area or zip code used as a proxy"),
-            ("Socioeconomic Bias",  "Employment sector or credit history weighting"),
-            ("Language Discrimination", "Primary language used against applicants"),
-            ("Insurance / Class Bias",  "Insurance tier used to rank medical priority"),
+            ("👤 Gender Bias",           "Decisions influenced by gender, name, or parental status"),
+            ("🕐 Age Discrimination",     "Unfair weighting of age group or seniority proxies"),
+            ("🌍 Racial / Ethnic Bias",   "Name-based or origin-based ethnic profiling"),
+            ("📍 Geographic Redlining",   "Residential area or zip code used as a proxy"),
+            ("💰 Socioeconomic Bias",     "Employment sector or credit history weighting"),
+            ("🗣️ Language Discrimination","Primary language used against applicants"),
+            ("📋 Insurance / Class Bias", "Insurance tier used to rank medical priority"),
         ]
         for name, desc in bias_info:
             st.markdown(
-                f'<div class="info-card blue" style="margin-bottom:0.5rem;">'
+                f'<div class="icard blue" style="margin-bottom:0.45rem;">'
                 f'<div class="ic-label">{name}</div>'
-                f'<div class="ic-value" style="font-size:0.87rem;">{desc}</div></div>',
+                f'<div class="ic-value" style="font-size:0.86rem;">{desc}</div></div>',
                 unsafe_allow_html=True,
             )
 
     with ab2:
-        st.markdown('<div class="sec-label">V3 Changelog</div>',
-                    unsafe_allow_html=True)
-        v3_feats = [
-            ("🔌", "Zero-Server Architecture", "No uvicorn needed — runs standalone"),
-            ("🔑", "Secure .env Key Loading",  "API key loaded from .env, never hardcoded"),
-            ("✉️", "Appeals Letter Generator",  "AI-drafted formal appeal letter"),
-            ("📦", "Batch Analysis",            "Analyse up to 10 decisions at once"),
-            ("🕸",  "Bias Radar Chart",          "Visual breakdown of 7 bias dimensions"),
-            ("📥", "CSV Export",                "Export history to CSV from History tab"),
-            ("🏷️", "Severity Badges",           "High / Medium / Low risk classification"),
-            ("🟣", "V3 Design Refresh",         "Purple V3 badge + refined palette"),
+        st.markdown('<div class="sec-label">V4 New Features</div>', unsafe_allow_html=True)
+        v4_feats = [
+            ("📎", "PDF / DOCX / Image Upload", "Extract text from uploaded documents automatically"),
+            ("🤖", "Google Gemini Integration", "Plain-English explanations + image OCR via Gemini 1.5 Flash"),
+            ("🎯", "Step-by-step guided flow", "Clear 3-step progress indicator"),
+            ("🔑", "Dual API key support", "Groq + Gemini keys via sidebar"),
+            ("🖼️", "Empty states", "Helpful guidance when no data exists"),
+            ("📋", "Type selector with icons", "Clearer decision type selection"),
+            ("📥", "Better download UX", "Report + appeal letter + CSV exports"),
+            ("🏆", "Hackathon compliance badge", "Shows Google AI model usage"),
+            ("🧹", "V4 design refresh", "Fraunces serif + Instrument Sans + lime palette"),
         ]
-        for icon, name, desc in v3_feats:
+        for icon, name, desc in v4_feats:
             st.markdown(
-                f'<div class="info-card purple" style="margin-bottom:0.4rem;">'
-                f'<div class="ic-label">{icon} {name}</div>'
-                f'<div class="ic-value" style="font-size:0.87rem;">{desc}</div></div>',
+                f'<div class="feat-card">'
+                f'<div class="feat-title">{icon} {name}</div>'
+                f'<div class="feat-desc">{desc}</div></div>',
                 unsafe_allow_html=True,
             )
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown('<div class="sec-label">Tech Stack</div>', unsafe_allow_html=True)
-        for name, desc in [
-            ("⚡ Groq",          "LLM inference"),
-            ("🦙 Llama 3.3 70B", "Language model"),
-            ("🎈 Streamlit",     "Full-stack UI (standalone)"),
-            ("🗄️ SQLite",        "Persistent local database"),
-            ("📊 Plotly",        "Interactive charts"),
-        ]:
+        tech = [
+            ("⚡ Groq",              "LLM inference engine"),
+            ("🦙 Llama 3.3 70B",    "Primary language model"),
+            ("🤖 Gemini 1.5 Flash", "Google AI (hackathon req.)"),
+            ("🎈 Streamlit",        "Full-stack UI, zero server"),
+            ("🗄️ SQLite",           "Persistent local database"),
+            ("📊 Plotly",           "Interactive charts"),
+            ("📄 PyMuPDF",          "PDF text extraction"),
+            ("📝 python-docx",      "Word doc extraction"),
+        ]
+        for name, desc in tech:
             st.markdown(
-                f'<div style="display:flex; justify-content:space-between; '
-                f'font-family:DM Mono,monospace; font-size:0.75rem; '
-                f'padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.05);">'
-                f'<span style="color:#eef0f8;">{name}</span>'
-                f'<span style="color:#4a5268;">{desc}</span></div>',
+                f'<div style="display:flex;justify-content:space-between;'
+                f'font-family:JetBrains Mono,monospace;font-size:0.72rem;'
+                f'padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'
+                f'<span style="color:#f0f2f7;">{name}</span>'
+                f'<span style="color:#5a6478;">{desc}</span></div>',
                 unsafe_allow_html=True,
             )
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(
-            '<div class="info-card amber">'
+            '<div class="icard amber">'
             '<div class="ic-label">⚠ Disclaimer</div>'
-            '<div class="ic-value" style="font-size:0.86rem;">'
-            'Not legal advice. Built for educational and awareness purposes only. '
+            '<div class="ic-value" style="font-size:0.85rem;">'
+            'Not legal advice. Built for educational and awareness purposes. '
             'Consult a qualified legal professional for formal discrimination claims.'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            '<div class="icard lime">'
+            '<div class="ic-label">🏆 Google Solution Challenge 2026</div>'
+            '<div class="ic-value" style="font-size:0.85rem;">'
+            'Theme: Build with AI<br>'
+            'Problem: Unbiased AI Decision Making<br>'
+            'Uses: Gemini 1.5 Flash (Google AI model ✓)<br>'
+            'Impact: Helps people identify discriminatory automated decisions'
             '</div></div>',
             unsafe_allow_html=True,
         )
@@ -1891,7 +2051,8 @@ with tab_about:
 
 st.markdown(
     '<div class="footer-bar">'
-    'Verdict Watch V3  ·  Powered by Groq / Llama 3.3 70B  ·  Not Legal Advice'
+    'Verdict Watch V4  ·  Groq Llama 3.3 70B + Google Gemini 1.5 Flash  ·  '
+    'Google Solution Challenge 2026 — Build with AI  ·  Not Legal Advice'
     '</div>',
     unsafe_allow_html=True,
 )
