@@ -1,5 +1,5 @@
-# Verdict Watch V4 — Requirements
-# Google Solution Challenge 2026 — Build with AI
+# Verdict Watch V7 — Requirements
+# Google Enterprise Edition
 
 # ── Core API & Server
 fastapi
@@ -10,7 +10,7 @@ httpx
 python-dotenv
 
 # ── UI
-streamlit
+streamlit>=1.32.0
 
 # ── Database
 sqlalchemy
@@ -18,13 +18,10 @@ sqlalchemy
 # ── AI — Primary pipeline
 groq
 
-# ── AI — Google (mandatory for GSC 2026 hackathon)
-google-generativeai
-
 # ── Charts & Data
 plotly
 pandas
 
-# ── File parsing (V4 — PDF / DOCX / image upload)
-PyMuPDF          # pip name: PyMuPDF → import fitz  (PDF extraction)
-python-docx      # DOCX extraction
+# ── File parsing
+PyMuPDF          # PDF extraction (pip name: PyMuPDF → import fitz)
+python-docx      # DOCX extractions

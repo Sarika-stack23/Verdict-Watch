@@ -1,5 +1,5 @@
 """
-api.py — Verdict Watch
+api.py — Verdict Watch V7
 FastAPI app with all endpoints.
 Run with: uvicorn api:app --reload
 """
@@ -10,16 +10,14 @@ from pydantic import BaseModel
 from typing import Optional
 import services
 
-# ── Init DB on startup
 services.init_db()
 
 app = FastAPI(
     title="Verdict Watch API",
-    description="AI-powered bias detection for automated decisions",
-    version="1.0.0",
+    description="AI-powered bias detection for automated decisions — V7",
+    version="7.0.0",
 )
 
-# ── Allow Streamlit frontend to call this API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,13 +26,9 @@ app.add_middleware(
 )
 
 
-# ─────────────────────────────────────────────
-# REQUEST / RESPONSE SCHEMAS
-# ─────────────────────────────────────────────
-
 class AnalyseRequest(BaseModel):
     decision_text: str
-    decision_type: str = "other"  # job / loan / medical / university / other
+    decision_type: str = "other"
 
 
 class AnalyseResponse(BaseModel):
@@ -51,19 +45,10 @@ class AnalyseResponse(BaseModel):
     created_at: Optional[str]
 
 
-# ─────────────────────────────────────────────
-# ENDPOINTS
-# ─────────────────────────────────────────────
-
 @app.post("/api/analyse", response_model=AnalyseResponse, tags=["Analysis"])
 def analyse_decision(payload: AnalyseRequest):
-    """
-    Run the full 3-call Groq pipeline on a pasted decision text.
-    Returns the complete bias report.
-    """
     if not payload.decision_text.strip():
         raise HTTPException(status_code=400, detail="decision_text cannot be empty")
-
     try:
         report = services.run_full_pipeline(
             decision_text=payload.decision_text,
@@ -73,15 +58,11 @@ def analyse_decision(payload: AnalyseRequest):
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Pipeline failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Pipeline failed: {str(e)}")
 
 
 @app.get("/api/reports", tags=["Reports"])
 def list_reports():
-    """Return all past bias reports, newest first."""
     try:
         return services.get_all_reports()
     except Exception as e:
@@ -90,7 +71,6 @@ def list_reports():
 
 @app.get("/api/reports/{report_id}", response_model=AnalyseResponse, tags=["Reports"])
 def get_report(report_id: str):
-    """Return a single report by ID."""
     report = services.get_report_by_id(report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -99,19 +79,16 @@ def get_report(report_id: str):
 
 @app.get("/api/health", tags=["Health"])
 def health_check():
-    """Check API and database status."""
     try:
-        # ✅ FIXED: Use SQLAlchemy ORM query instead of raw .execute()
         db = services.get_db()
         db.query(services.Analysis).limit(1).all()
         db.close()
         db_status = "ok"
     except Exception as e:
         db_status = f"error: {str(e)}"
-
     return {
-        "status": "ok",
+        "status":   "ok",
         "database": db_status,
-        "model": "llama-3.3-70b-versatile",
-        "version": "1.0.0",
+        "model":    "llama-3.3-70b-versatile",
+        "version":  "7.0.0",
     }
