@@ -103,4 +103,4 @@ Open http://localhost:8501 in your browser.
 
 ---
 
-*Not legal advice. Built for educational and awareness purposes.*
+*Not legal advice. Built for educational and awareness purposes.
