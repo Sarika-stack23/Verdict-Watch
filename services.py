@@ -1,6 +1,8 @@
 """
-services.py — Verdict Watch V5
+services.py — Verdict Watch V7
 Database models + 3-chain Groq pipeline + enterprise additions:
+  - V7: Schema migration (text_hash fix)
+  - V7: Google Cloud / Material Design ready
   - Feedback / rating system
   - Duplicate analysis detection (text hashing)
   - Trend data helpers
@@ -14,11 +16,14 @@ import uuid
 import hashlib
 import logging
 import time
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, String, Boolean, Float, Text, DateTime, Integer
+from sqlalchemy import (
+    create_engine, Column, String, Boolean, Float,
+    Text, DateTime, Integer, text as sa_text
+)
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from groq import Groq
 
@@ -48,12 +53,12 @@ Base = declarative_base()
 class Analysis(Base):
     __tablename__ = "analyses"
 
-    id              = Column(String,  primary_key=True, default=lambda: str(uuid.uuid4()))
-    raw_text        = Column(Text,    nullable=False)
-    text_hash       = Column(String,  index=True)          # SHA-256 of stripped text
-    decision_type   = Column(String,  nullable=False)
-    extracted_factors = Column(Text)                       # JSON string
-    submitted_at    = Column(DateTime, default=datetime.utcnow)
+    id                = Column(String,   primary_key=True, default=lambda: str(uuid.uuid4()))
+    raw_text          = Column(Text,     nullable=False)
+    text_hash         = Column(String,   index=True)
+    decision_type     = Column(String,   nullable=False)
+    extracted_factors = Column(Text)
+    submitted_at      = Column(DateTime, default=datetime.utcnow)
 
 
 class Report(Base):
@@ -62,31 +67,39 @@ class Report(Base):
     id                      = Column(String,  primary_key=True, default=lambda: str(uuid.uuid4()))
     analysis_id             = Column(String,  nullable=False)
     bias_found              = Column(Boolean, default=False)
-    bias_types              = Column(Text)                 # JSON list
+    bias_types              = Column(Text)
     affected_characteristic = Column(String)
     original_outcome        = Column(String)
     fair_outcome            = Column(String)
     explanation             = Column(Text)
-    confidence_score        = Column(Float,  default=0.0)
-    recommendations         = Column(Text)                 # JSON list
+    confidence_score        = Column(Float,   default=0.0)
+    recommendations         = Column(Text)
     created_at              = Column(DateTime, default=datetime.utcnow)
 
 
 class Feedback(Base):
-    """User ratings on analysis quality — drives future QA."""
     __tablename__ = "feedback"
 
     id         = Column(String,  primary_key=True, default=lambda: str(uuid.uuid4()))
     report_id  = Column(String,  nullable=False, index=True)
-    rating     = Column(Integer, nullable=False)           # 1 = helpful, 0 = not helpful
+    rating     = Column(Integer, nullable=False)
     comment    = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db():
-    """Create all tables if they don't exist."""
+    """Create all tables and run safe column migrations."""
     Base.metadata.create_all(bind=engine)
-    log.info("Database initialised.")
+
+    # ── V7 Migration: add text_hash if missing (fixes V5→V6 upgrade error)
+    with engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(sa_text("PRAGMA table_info(analyses)"))]
+        if "text_hash" not in cols:
+            conn.execute(sa_text("ALTER TABLE analyses ADD COLUMN text_hash VARCHAR"))
+            conn.commit()
+            log.info("Migration: added text_hash column to analyses.")
+
+    log.info("Database initialised (V7).")
 
 
 def get_db() -> Session:
@@ -94,7 +107,7 @@ def get_db() -> Session:
 
 
 # ─────────────────────────────────────────────
-# TEXT HASHING (duplicate detection)
+# TEXT HASHING
 # ─────────────────────────────────────────────
 
 def hash_text(text: str) -> str:
@@ -103,7 +116,6 @@ def hash_text(text: str) -> str:
 
 
 def find_duplicate(text_hash: str) -> Optional[dict]:
-    """Return the most recent report for this exact text, or None."""
     db = get_db()
     try:
         analysis = (
@@ -121,12 +133,12 @@ def find_duplicate(text_hash: str) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────
-# GROQ CLIENT + RESILIENT CALL
+# GROQ CLIENT
 # ─────────────────────────────────────────────
 
-_MODEL = "llama-3.3-70b-versatile"
+_MODEL       = "llama-3.3-70b-versatile"
 _MAX_RETRIES = 3
-_RETRY_DELAY = 1.5  # seconds
+_RETRY_DELAY = 1.5
 
 
 def get_groq_client() -> Groq:
@@ -140,50 +152,37 @@ def get_groq_client() -> Groq:
 
 
 def call_groq(prompt: str, system: str, step_label: str = "") -> dict:
-    """
-    Resilient Groq call with exponential-backoff retry.
-    Returns parsed JSON dict.
-    """
     client = get_groq_client()
-
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            log.info("Groq call %s — attempt %d/%d", step_label, attempt, _MAX_RETRIES)
+            log.info("Groq %s — attempt %d/%d", step_label, attempt, _MAX_RETRIES)
             response = client.chat.completions.create(
                 model=_MODEL,
                 max_tokens=1024,
-                temperature=0.1,          # low temp → deterministic, reliable JSON
+                temperature=0.1,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user",   "content": prompt},
                 ],
             )
             raw = response.choices[0].message.content.strip()
-
-            # Strip markdown fences if model adds them
             if raw.startswith("```"):
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):
                     raw = raw[4:]
             raw = raw.strip()
-
             parsed = json.loads(raw)
-            log.info("Groq call %s succeeded on attempt %d", step_label, attempt)
+            log.info("Groq %s succeeded attempt %d", step_label, attempt)
             return parsed
-
         except json.JSONDecodeError as e:
-            log.warning("JSON parse error on attempt %d: %s", attempt, e)
+            log.warning("JSON parse error attempt %d: %s", attempt, e)
             if attempt == _MAX_RETRIES:
-                raise ValueError(
-                    f"AI returned invalid JSON after {_MAX_RETRIES} attempts. "
-                    "Please try again."
-                )
+                raise ValueError(f"AI returned invalid JSON after {_MAX_RETRIES} attempts.")
         except Exception as e:
-            log.warning("Groq error on attempt %d: %s", attempt, e)
+            log.warning("Groq error attempt %d: %s", attempt, e)
             if attempt == _MAX_RETRIES:
                 raise
             time.sleep(_RETRY_DELAY * attempt)
-
     raise ValueError("Groq pipeline failed — all retries exhausted.")
 
 
@@ -239,7 +238,8 @@ def generate_fair_outcome(extracted: dict, bias_result: dict) -> dict:
         "fair_outcome (string), fair_reasoning (string), "
         "what_was_wrong (simple plain English string for the affected person), "
         "next_steps (list of exactly 3 actionable strings), "
-        "legal_frameworks (list of up to 2 relevant laws or regulations, e.g. 'Title VII of the Civil Rights Act'). "
+        "legal_frameworks (list of up to 2 relevant laws or regulations, "
+        "e.g. 'Title VII of the Civil Rights Act'). "
         "No explanation. No markdown."
     )
     prompt = (
@@ -259,16 +259,11 @@ def generate_fair_outcome(extracted: dict, bias_result: dict) -> dict:
 def run_full_pipeline(
     decision_text: str,
     decision_type: str,
-    progress_callback=None,          # optional callable(step: int, label: str)
+    progress_callback=None,
 ) -> dict:
-    """
-    Chains all 3 Groq calls, saves to DB, returns full report dict.
-    progress_callback(step, label) is called after each step if provided.
-    """
     text_hash = hash_text(decision_text)
     db: Session = get_db()
     try:
-        # ── Step 1
         if progress_callback:
             progress_callback(1, "Extracting decision criteria…")
         extracted = extract_factors(decision_text, decision_type)
@@ -283,15 +278,25 @@ def run_full_pipeline(
         db.commit()
         db.refresh(analysis)
 
-        # ── Step 2
         if progress_callback:
             progress_callback(2, "Scanning for bias patterns…")
         bias_result = detect_bias(extracted)
 
-        # ── Step 3
         if progress_callback:
             progress_callback(3, "Generating fair outcome…")
         fair_result = generate_fair_outcome(extracted, bias_result)
+
+        report_extra = {
+            "bias_phrases":     bias_result.get("bias_phrases", []),
+            "legal_frameworks": fair_result.get("legal_frameworks", []),
+            "fair_reasoning":   fair_result.get("fair_reasoning", ""),
+            "severity":         bias_result.get("severity", "low"),
+            "bias_evidence":    bias_result.get("bias_evidence", ""),
+        }
+        full_recs_payload = {
+            "steps": fair_result.get("next_steps", []),
+            "extra": report_extra,
+        }
 
         report = Report(
             analysis_id             = analysis.id,
@@ -302,24 +307,8 @@ def run_full_pipeline(
             fair_outcome            = fair_result.get("fair_outcome", ""),
             explanation             = fair_result.get("what_was_wrong", ""),
             confidence_score        = float(bias_result.get("confidence", 0.0)),
-            recommendations         = json.dumps(fair_result.get("next_steps", [])),
+            recommendations         = json.dumps(full_recs_payload),
         )
-        # Store extra V5 fields in existing columns via JSON extension
-        # bias_phrases and legal_frameworks appended to explanation as structured JSON
-        report_extra = {
-            "bias_phrases":     bias_result.get("bias_phrases", []),
-            "legal_frameworks": fair_result.get("legal_frameworks", []),
-            "fair_reasoning":   fair_result.get("fair_reasoning", ""),
-            "severity":         bias_result.get("severity", "low"),
-            "bias_evidence":    bias_result.get("bias_evidence", ""),
-        }
-        # Store in a reserved column (recommendations JSON dict extension)
-        full_recs_payload = {
-            "steps":  fair_result.get("next_steps", []),
-            "extra":  report_extra,
-        }
-        report.recommendations = json.dumps(full_recs_payload)
-
         db.add(report)
         db.commit()
         db.refresh(report)
@@ -333,11 +322,11 @@ def run_full_pipeline(
 
 
 # ─────────────────────────────────────────────
-# APPEALS LETTER
+# APPEAL LETTER
 # ─────────────────────────────────────────────
 
 def generate_appeal_letter(report: dict, decision_text: str, decision_type: str) -> str:
-    client = get_groq_client()
+    client      = get_groq_client()
     bias_types  = ", ".join(report.get("bias_types", [])) or "undisclosed bias"
     affected    = report.get("affected_characteristic", "a protected characteristic")
     explanation = report.get("explanation", "")
@@ -402,7 +391,7 @@ def get_feedback_stats() -> dict:
             return {"total": 0, "helpful_pct": 0}
         helpful = sum(1 for f in all_fb if f.rating == 1)
         return {
-            "total": len(all_fb),
+            "total":       len(all_fb),
             "helpful_pct": round(helpful / len(all_fb) * 100),
         }
     finally:
@@ -410,11 +399,10 @@ def get_feedback_stats() -> dict:
 
 
 # ─────────────────────────────────────────────
-# HELPERS — READ FROM DB
+# HELPERS
 # ─────────────────────────────────────────────
 
 def build_report_dict(report: Report) -> dict:
-    # Handle both old format (plain list) and new V5 format (dict with steps+extra)
     recs_raw = json.loads(report.recommendations or "[]")
     if isinstance(recs_raw, dict):
         recommendations = recs_raw.get("steps", [])
@@ -424,23 +412,22 @@ def build_report_dict(report: Report) -> dict:
         extra           = {}
 
     return {
-        "id":                     report.id,
-        "analysis_id":            report.analysis_id,
-        "bias_found":             report.bias_found,
-        "bias_types":             json.loads(report.bias_types or "[]"),
+        "id":                      report.id,
+        "analysis_id":             report.analysis_id,
+        "bias_found":              report.bias_found,
+        "bias_types":              json.loads(report.bias_types or "[]"),
         "affected_characteristic": report.affected_characteristic,
-        "original_outcome":       report.original_outcome,
-        "fair_outcome":           report.fair_outcome,
-        "explanation":            report.explanation,
-        "confidence_score":       report.confidence_score,
-        "recommendations":        recommendations,
-        "created_at":             report.created_at.isoformat() if report.created_at else None,
-        # V5 extras
-        "bias_phrases":           extra.get("bias_phrases", []),
-        "legal_frameworks":       extra.get("legal_frameworks", []),
-        "fair_reasoning":         extra.get("fair_reasoning", ""),
-        "severity":               extra.get("severity", "low"),
-        "bias_evidence":          extra.get("bias_evidence", ""),
+        "original_outcome":        report.original_outcome,
+        "fair_outcome":            report.fair_outcome,
+        "explanation":             report.explanation,
+        "confidence_score":        report.confidence_score,
+        "recommendations":         recommendations,
+        "created_at":              report.created_at.isoformat() if report.created_at else None,
+        "bias_phrases":            extra.get("bias_phrases", []),
+        "legal_frameworks":        extra.get("legal_frameworks", []),
+        "fair_reasoning":          extra.get("fair_reasoning", ""),
+        "severity":                extra.get("severity", "low"),
+        "bias_evidence":           extra.get("bias_evidence", ""),
     }
 
 
@@ -463,10 +450,9 @@ def get_report_by_id(report_id: str) -> dict | None:
 
 
 def get_trend_data() -> list[dict]:
-    """Daily bias rate for the last 30 days — used in dashboard trend chart."""
     db = get_db()
     try:
-        rows = db.query(Report).order_by(Report.created_at.asc()).all()
+        rows   = db.query(Report).order_by(Report.created_at.asc()).all()
         by_day: dict[str, dict] = {}
         for r in rows:
             day = (r.created_at or datetime.utcnow()).strftime("%Y-%m-%d")
@@ -475,12 +461,11 @@ def get_trend_data() -> list[dict]:
             by_day[day]["total"] += 1
             if r.bias_found:
                 by_day[day]["bias"] += 1
-
         return [
             {
-                "date": d,
-                "total": v["total"],
-                "bias": v["bias"],
+                "date":      d,
+                "total":     v["total"],
+                "bias":      v["bias"],
                 "bias_rate": round(v["bias"] / v["total"] * 100) if v["total"] else 0,
             }
             for d, v in sorted(by_day.items())
@@ -493,7 +478,7 @@ def get_all_analyses_summary() -> list[dict]:
     db = get_db()
     try:
         analyses = db.query(Analysis).order_by(Analysis.submitted_at.desc()).all()
-        result = []
+        result   = []
         for a in analyses:
             report = db.query(Report).filter(Report.analysis_id == a.id).first()
             result.append({

@@ -1,3 +1,6 @@
 .env
 __pycache__/
 verdict_watch.db
+*.pyc
+.DS_Store
+venv/
