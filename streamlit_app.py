@@ -1,21 +1,25 @@
 """
-streamlit_app.py — Verdict Watch V7
+streamlit_app.py — Verdict Watch V8
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-V7 Changelog:
-  ✅ FIXED  text_hash schema migration (no more OperationalError)
-  ✅ FIXED  All f-string / backslash issues
-  ✨ NEW    Google Material Design 3 enterprise aesthetic
-  ✨ NEW    Google-style top navigation bar
-  ✨ NEW    MD3 cards with elevation + ripple hover states
-  ✨ NEW    Google Sans / Product Sans inspired typography
-  ✨ NEW    Tonal surface system (surface, surface-variant, container)
-  ✨ NEW    Risk score ring (SVG progress arc)
-  ✨ NEW    Inline audit trail timeline
-  ✨ NEW    Protected characteristics chip grid
-  ✨ NEW    Google-style empty states with illustrations
-  ✨ NEW    Animated scan progress (linear determinate)
-  ✨ NEW    Dashboard KPI cards with trend arrows
-  ✨ NEW    Dark/light-mode ready CSS variables
+V8 UI/UX Overhaul Changelog:
+  ✅ FIXED  3-column result layout — equal width, proper alignment
+  ✅ FIXED  SVG confidence ring — properly centred inside card
+  ✅ FIXED  Verdict banner — larger icon, better hierarchy
+  ✅ FIXED  Section dividers — replaced with proper spacing
+  ✅ FIXED  Card height consistency across result columns
+  ✅ FIXED  Sidebar — cleaner, removed noisy "V7 Updates" card
+  ✅ FIXED  Input toolbar icons — removed stray emoji toolbar
+  ✅ FIXED  Typography hierarchy — clear display / body / caption scale
+  ✅ FIXED  Legal frameworks — moved to dedicated section below 3-col
+  ✅ FIXED  Duplicate warning — better spacing and styling
+  ✅ FIXED  Input row — decision type + char counter better aligned
+  ✅ FIXED  Section label consistency — no mixed emoji/text prefixes
+  ✅ FIXED  Recommendation items — better padding, consistent height
+  ✅ FIXED  Feedback buttons — proper spacing, not crammed
+  ✨ NEW    Result section uses a 2+1 layout for better readability
+  ✨ NEW    Animated scan steps use linear progress, not spinner
+  ✨ NEW    Empty state illustrations per tab
+  ✨ NEW    Smoother card hover transitions
 
 Run:
   streamlit run streamlit_app.py
@@ -53,773 +57,672 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────
-# GOOGLE MATERIAL DESIGN 3 — ENTERPRISE CSS
+# V8 — DESIGN SYSTEM CSS
 # ─────────────────────────────────────────────
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Display:wght@400;500;700&family=Google+Sans+Mono&family=Roboto:wght@300;400;500&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=DM+Serif+Display&display=swap');
 
-/* ══ MD3 TOKEN SYSTEM ══ */
+/* ══ V8 TOKEN SYSTEM ══ */
 :root {
-    /* Primary — Google Blue */
-    --md-primary:            #1a73e8;
-    --md-on-primary:         #ffffff;
-    --md-primary-container:  #d2e3fc;
-    --md-on-primary-container: #041e49;
+    /* Primary */
+    --p:          #1a73e8;
+    --p-lt:       #d2e3fc;
+    --p-dk:       #1557b0;
+    --on-p:       #ffffff;
+    --on-p-lt:    #041e49;
 
-    /* Error — Google Red */
-    --md-error:              #d93025;
-    --md-on-error:           #ffffff;
-    --md-error-container:    #fce8e6;
-    --md-on-error-container: #410e0b;
+    /* Error / Danger */
+    --e:          #c5221f;
+    --e-lt:       #fce8e6;
+    --on-e-lt:    #410e0b;
 
-    /* Tertiary — Google Green */
-    --md-tertiary:           #137333;
-    --md-on-tertiary:        #ffffff;
-    --md-tertiary-container: #ceead6;
-    --md-on-tertiary-container: #062711;
+    /* Success */
+    --s:          #137333;
+    --s-lt:       #e6f4ea;
+    --on-s-lt:    #0d5226;
 
-    /* Warning — Google Yellow */
-    --md-warning:            #f29900;
-    --md-warning-container:  #fef7e0;
+    /* Warning */
+    --w:          #e37400;
+    --w-lt:       #fef7e0;
+    --on-w-lt:    #7a4a00;
 
     /* Surfaces */
-    --md-background:         #f8f9fa;
-    --md-surface:            #ffffff;
-    --md-surface-variant:    #f1f3f4;
-    --md-surface-container:  #e8eaed;
-    --md-surface-container-high: #dadce0;
-    --md-outline:            #dadce0;
-    --md-outline-variant:    #e8eaed;
+    --bg:         #f8f9fa;
+    --surf:       #ffffff;
+    --surf-2:     #f1f3f4;
+    --surf-3:     #e8eaed;
+    --border:     #dadce0;
+    --border-lt:  #f1f3f4;
 
     /* Text */
-    --md-on-surface:         #202124;
-    --md-on-surface-variant: #5f6368;
-    --md-on-surface-muted:   #9aa0a6;
+    --t1:         #202124;
+    --t2:         #5f6368;
+    --t3:         #9aa0a6;
 
     /* Elevation */
-    --md-elev-1: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
-    --md-elev-2: 0 1px 2px rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15);
-    --md-elev-3: 0 4px 8px 3px rgba(60,64,67,0.15), 0 1px 3px rgba(60,64,67,0.3);
+    --sh1: 0 1px 3px rgba(60,64,67,.12), 0 1px 2px rgba(60,64,67,.08);
+    --sh2: 0 2px 8px rgba(60,64,67,.12), 0 1px 4px rgba(60,64,67,.08);
+    --sh3: 0 4px 16px rgba(60,64,67,.12), 0 2px 6px rgba(60,64,67,.08);
 
-    /* Shape */
-    --md-radius-xs:  4px;
-    --md-radius-sm:  8px;
-    --md-radius-md:  12px;
-    --md-radius-lg:  16px;
-    --md-radius-xl:  28px;
-    --md-radius-full: 999px;
+    /* Radii */
+    --r-xs: 4px;
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 16px;
+    --r-xl: 24px;
+    --r-full: 999px;
 
-    /* Typography */
-    --font-display: 'Google Sans Display', 'Noto Sans', sans-serif;
-    --font-body:    'Google Sans', 'Roboto', sans-serif;
-    --font-mono:    'Google Sans Mono', 'Roboto Mono', monospace;
+    /* Fonts */
+    --ff-display: 'DM Serif Display', Georgia, serif;
+    --ff-body:    'DM Sans', system-ui, sans-serif;
+    --ff-mono:    'DM Mono', monospace;
+
+    /* Spacing */
+    --gap-xs: 4px;
+    --gap-sm: 8px;
+    --gap-md: 16px;
+    --gap-lg: 24px;
+    --gap-xl: 40px;
 }
 
-/* ══ BASE ══ */
+/* ══ RESET & BASE ══ */
 html, body, [class*="css"] {
-    font-family: var(--font-body) !important;
-    background: var(--md-background) !important;
-    color: var(--md-on-surface) !important;
+    font-family: var(--ff-body) !important;
+    background: var(--bg) !important;
+    color: var(--t1) !important;
+    -webkit-font-smoothing: antialiased;
 }
-[data-testid="stAppViewContainer"] {
-    background: var(--md-background) !important;
-}
+[data-testid="stAppViewContainer"] { background: var(--bg) !important; }
 [data-testid="stSidebar"] {
-    background: var(--md-surface) !important;
-    border-right: 1px solid var(--md-outline) !important;
+    background: var(--surf) !important;
+    border-right: 1px solid var(--border) !important;
 }
 [data-testid="stSidebar"] > div { padding-top: 0 !important; }
 
 /* ══ SCROLLBAR ══ */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--md-surface-container); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--md-surface-container-high); }
+::-webkit-scrollbar-thumb { background: var(--surf-3); border-radius: 3px; }
+
+/* ══ HIDE STRAY STREAMLIT ELEMENTS ══ */
+/* Hide the colour picker toolbar that shows above text_area */
+[data-testid="stColorPicker"],
+div[data-testid="stToolbar"] { display: none !important; }
+.stTextArea [data-baseweb="base-input"] > div:first-child { display: none !important; }
 
 /* ══ TABS ══ */
 .stTabs [data-baseweb="tab-list"] {
-    background: var(--md-surface);
-    border-bottom: 1px solid var(--md-outline);
-    padding: 0 8px; gap: 0;
+    background: var(--surf);
+    border-bottom: 1px solid var(--border);
+    padding: 0 4px;
+    gap: 0;
     border-radius: 0;
     box-shadow: none;
 }
 .stTabs [data-baseweb="tab"] {
-    font-family: var(--font-body) !important;
-    font-weight: 500; font-size: 0.875rem;
-    color: var(--md-on-surface-variant);
+    font-family: var(--ff-body) !important;
+    font-weight: 500;
+    font-size: 0.855rem;
+    color: var(--t2) !important;
     background: transparent !important;
     border-radius: 0 !important;
-    padding: 14px 20px !important;
+    padding: 12px 18px !important;
     border: none !important;
-    border-bottom: 3px solid transparent !important;
-    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent !important;
+    transition: color 0.15s, border-color 0.15s;
     letter-spacing: 0.01em;
 }
-.stTabs [data-baseweb="tab"]:hover {
-    color: var(--md-primary) !important;
-    background: rgba(26,115,232,0.04) !important;
-}
+.stTabs [data-baseweb="tab"]:hover { color: var(--p) !important; }
 .stTabs [aria-selected="true"] {
-    color: var(--md-primary) !important;
-    border-bottom: 3px solid var(--md-primary) !important;
-    background: transparent !important;
+    color: var(--p) !important;
+    border-bottom: 2px solid var(--p) !important;
     font-weight: 600 !important;
 }
-.stTabs [data-baseweb="tab-panel"] { padding-top: 1.5rem; }
+.stTabs [data-baseweb="tab-panel"] { padding-top: 1.75rem; }
 
 /* ══ BUTTONS ══ */
 .stButton > button {
-    font-family: var(--font-body) !important;
-    font-weight: 500; font-size: 0.875rem;
-    background: var(--md-primary);
-    color: var(--md-on-primary);
+    font-family: var(--ff-body) !important;
+    font-weight: 500;
+    font-size: 0.875rem;
+    background: var(--p);
+    color: var(--on-p);
     border: none;
-    border-radius: var(--md-radius-xl);
-    padding: 0.6rem 1.75rem;
+    border-radius: var(--r-full);
+    padding: 0.55rem 1.5rem;
     letter-spacing: 0.01em;
-    transition: all 0.2s ease;
-    box-shadow: var(--md-elev-1);
+    box-shadow: var(--sh1);
+    transition: box-shadow 0.15s, transform 0.1s, filter 0.15s;
 }
 .stButton > button:hover {
-    box-shadow: var(--md-elev-2);
-    filter: brightness(1.06);
+    box-shadow: var(--sh2);
+    filter: brightness(1.07);
     transform: translateY(-1px);
 }
-.stButton > button:active { transform: translateY(0); box-shadow: var(--md-elev-1); }
+.stButton > button:active { transform: translateY(0); box-shadow: var(--sh1); }
 
-/* ══ INPUTS ══ */
-.stTextArea textarea {
-    font-family: var(--font-body) !important;
-    font-size: 0.9rem !important;
-    background: var(--md-surface) !important;
-    border: 1px solid var(--md-outline) !important;
-    border-radius: var(--md-radius-md) !important;
-    color: var(--md-on-surface) !important;
-    line-height: 1.6 !important;
-    transition: border-color 0.2s !important;
-}
-.stTextArea textarea:focus {
-    border-color: var(--md-primary) !important;
-    border-width: 2px !important;
-    box-shadow: none !important;
-    outline: none !important;
-}
-.stTextArea label, .stSelectbox label, .stTextInput label {
-    font-family: var(--font-body) !important;
-    font-size: 0.8rem !important;
-    font-weight: 500 !important;
-    color: var(--md-on-surface-variant) !important;
-    letter-spacing: 0.01em !important;
-}
-.stSelectbox > div > div,
-.stTextInput > div > div > input {
-    background: var(--md-surface) !important;
-    border: 1px solid var(--md-outline) !important;
-    border-radius: var(--md-radius-sm) !important;
-    color: var(--md-on-surface) !important;
-    font-family: var(--font-body) !important;
-    font-size: 0.875rem !important;
-}
-[data-testid="stFileUploader"] {
-    background: var(--md-surface) !important;
-    border: 2px dashed var(--md-outline) !important;
-    border-radius: var(--md-radius-md) !important;
-}
-
-/* ══ METRICS ══ */
-[data-testid="metric-container"] {
-    background: var(--md-surface);
-    border: none;
-    border-radius: var(--md-radius-lg);
-    padding: 1.2rem 1.4rem;
-    box-shadow: var(--md-elev-1);
-}
-[data-testid="metric-container"] label {
-    font-family: var(--font-body) !important;
-    font-size: 0.75rem !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.05em !important;
-    text-transform: uppercase !important;
-    color: var(--md-on-surface-variant) !important;
-}
-[data-testid="metric-container"] [data-testid="stMetricValue"] {
-    font-family: var(--font-display) !important;
-    font-weight: 700 !important;
-    font-size: 2rem !important;
-    color: var(--md-on-surface) !important;
-}
-[data-testid="metric-container"] [data-testid="stMetricDelta"] {
-    font-family: var(--font-body) !important;
-    font-size: 0.78rem !important;
-}
-
-/* ══ PROGRESS ══ */
-.stProgress > div > div {
-    background: var(--md-primary) !important;
-    border-radius: 2px;
-}
-.stProgress > div {
-    background: var(--md-surface-container) !important;
-    border-radius: 2px;
-}
-
-/* ══ DOWNLOAD BUTTON ══ */
-.stDownloadButton > button {
-    background: var(--md-surface) !important;
-    color: var(--md-primary) !important;
-    border: 1px solid var(--md-primary) !important;
-    border-radius: var(--md-radius-xl) !important;
-    font-family: var(--font-body) !important;
-    font-weight: 500; font-size: 0.875rem !important;
-    box-shadow: none !important;
-}
-.stDownloadButton > button:hover {
-    background: rgba(26,115,232,0.06) !important;
-    box-shadow: var(--md-elev-1) !important;
-}
-
-/* ══ EXPANDER ══ */
-.streamlit-expanderHeader {
-    font-family: var(--font-body) !important;
-    font-weight: 500 !important;
-    font-size: 0.875rem !important;
-    background: var(--md-surface) !important;
-    border: none !important;
-    border-bottom: 1px solid var(--md-outline) !important;
-    color: var(--md-on-surface) !important;
-    border-radius: 0 !important;
-    padding: 0.85rem 1rem !important;
-}
-.streamlit-expanderContent {
-    background: var(--md-surface) !important;
-    border: 1px solid var(--md-outline) !important;
-    border-top: none !important;
-    border-radius: 0 0 var(--md-radius-sm) var(--md-radius-sm) !important;
-}
-
-/* ══ DATAFRAME ══ */
-[data-testid="stDataFrame"] { border-radius: var(--md-radius-md) !important; overflow: hidden; }
-
-/* ═══════════════════════════════════════════
-   VERDICT WATCH V7 — CUSTOM COMPONENTS
-═══════════════════════════════════════════ */
-
-/* Top App Bar */
-.vw-appbar {
-    background: var(--md-surface);
-    border-bottom: 1px solid var(--md-outline);
-    padding: 0 24px;
-    height: 64px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    box-shadow: 0 1px 3px rgba(60,64,67,0.12);
-    margin: -1rem -1rem 1.5rem;
-}
-.vw-logo-mark {
-    width: 36px; height: 36px;
-    background: var(--md-primary);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.1rem; flex-shrink: 0;
-}
-.vw-appbar-title {
-    font-family: var(--font-display);
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--md-on-surface);
-    letter-spacing: -0.01em;
-}
-.vw-appbar-sub {
-    font-family: var(--font-body);
-    font-size: 0.78rem;
-    color: var(--md-on-surface-variant);
-    margin-top: 1px;
-}
-.vw-version-chip {
-    background: var(--md-primary-container);
-    color: var(--md-on-primary-container);
-    font-family: var(--font-body);
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 2px 10px;
-    border-radius: var(--md-radius-full);
-    letter-spacing: 0.02em;
-    margin-left: auto;
-}
-
-/* Sidebar header */
-.vw-sidebar-header {
-    background: linear-gradient(135deg, var(--md-primary) 0%, #1557b0 100%);
-    padding: 20px 16px 16px;
-    margin: -1rem -1rem 1rem;
-}
-.vw-sidebar-product {
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #ffffff;
-    letter-spacing: -0.01em;
-}
-.vw-sidebar-tagline {
-    font-family: var(--font-body);
-    font-size: 0.72rem;
-    color: rgba(255,255,255,0.75);
-    margin-top: 2px;
-}
-.vw-key-chip-ok {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: rgba(255,255,255,0.15);
-    border: 1px solid rgba(255,255,255,0.3);
-    color: #ffffff;
-    border-radius: var(--md-radius-full);
-    padding: 4px 10px;
-    font-family: var(--font-body);
-    font-size: 0.68rem;
-    font-weight: 500;
-    margin-top: 8px;
-    letter-spacing: 0.02em;
-}
-.vw-key-chip-err {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(252,210,207,0.5);
-    color: #fce8e6;
-    border-radius: var(--md-radius-full);
-    padding: 4px 10px;
-    font-family: var(--font-body);
-    font-size: 0.68rem;
-    font-weight: 500;
-    margin-top: 8px;
-    letter-spacing: 0.02em;
-}
-
-/* Section label */
-.vw-section-label {
-    font-family: var(--font-body);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--md-on-surface-variant);
-    margin-bottom: 0.65rem;
-    margin-top: 0.3rem;
-}
-
-/* MD3 Card */
-.md3-card {
-    background: var(--md-surface);
-    border-radius: var(--md-radius-lg);
-    padding: 1.25rem 1.5rem;
-    border: none;
-    box-shadow: var(--md-elev-1);
-    transition: box-shadow 0.2s ease;
-    margin-bottom: 0.75rem;
-}
-.md3-card:hover { box-shadow: var(--md-elev-2); }
-.md3-card.filled-error   { background: var(--md-error-container); box-shadow: none; }
-.md3-card.filled-success { background: var(--md-tertiary-container); box-shadow: none; }
-.md3-card.filled-warning { background: var(--md-warning-container); box-shadow: none; }
-.md3-card.filled-primary { background: var(--md-primary-container); box-shadow: none; }
-.md3-card.outlined { background: var(--md-surface); border: 1px solid var(--md-outline); box-shadow: none; }
-.md3-card.tonal   { background: var(--md-surface-variant); box-shadow: none; }
-
-.md3-card-label {
-    font-family: var(--font-body);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--md-on-surface-variant);
-    margin-bottom: 0.4rem;
-}
-.md3-card-value {
-    font-family: var(--font-body);
-    font-size: 0.93rem;
-    color: var(--md-on-surface);
-    line-height: 1.55;
-}
-.md3-card-value.mono {
-    font-family: var(--font-mono);
-    font-size: 0.9rem;
-    font-weight: 500;
-}
-.md3-card-value.large {
-    font-family: var(--font-display);
-    font-size: 1.4rem;
-    font-weight: 700;
-}
-
-/* Verdict banners */
-@keyframes bias-pulse {
-    0%,100% { box-shadow: 0 0 0 0 rgba(217,48,37,0); }
-    50%      { box-shadow: 0 0 0 6px rgba(217,48,37,0.08); }
-}
-@keyframes clean-pulse {
-    0%,100% { box-shadow: 0 0 0 0 rgba(19,115,51,0); }
-    50%      { box-shadow: 0 0 0 6px rgba(19,115,51,0.06); }
-}
-
-.verdict-bias {
-    background: var(--md-error-container);
-    border: 1.5px solid rgba(217,48,37,0.4);
-    border-radius: var(--md-radius-xl);
-    padding: 1.5rem 2rem;
-    text-align: center;
-    animation: bias-pulse 3s ease-in-out infinite;
-}
-.verdict-clean {
-    background: var(--md-tertiary-container);
-    border: 1.5px solid rgba(19,115,51,0.3);
-    border-radius: var(--md-radius-xl);
-    padding: 1.5rem 2rem;
-    text-align: center;
-    animation: clean-pulse 3s ease-in-out infinite;
-}
-.v-icon  { font-size: 2.2rem; margin-bottom: 0.3rem; }
-.v-label {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    margin-bottom: 0.2rem;
-}
-.verdict-bias  .v-label { color: var(--md-error); }
-.verdict-clean .v-label { color: var(--md-tertiary); }
-.v-sub {
-    font-family: var(--font-body);
-    font-size: 0.82rem;
-    opacity: 0.65;
-}
-.verdict-bias  .v-sub { color: var(--md-on-error-container); }
-.verdict-clean .v-sub { color: var(--md-on-tertiary-container); }
-
-/* Risk ring */
-.risk-ring-wrap {
-    display: flex; flex-direction: column; align-items: center;
-    padding: 1.2rem 0.5rem;
-}
-.risk-ring-label {
-    font-family: var(--font-body);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--md-on-surface-variant);
-    margin-bottom: 0.6rem;
-}
-.risk-ring-sub {
-    font-family: var(--font-body);
-    font-size: 0.78rem;
-    color: var(--md-on-surface-variant);
-    text-align: center;
-    margin-top: 0.5rem;
-    line-height: 1.4;
-    max-width: 140px;
-}
-
-/* Severity chips */
-.sev-high   { display:inline-block; background:var(--md-error-container); color:var(--md-error); border-radius:var(--md-radius-full); padding:3px 12px; font-family:var(--font-body); font-size:0.72rem; font-weight:600; }
-.sev-medium { display:inline-block; background:var(--md-warning-container); color:#b06000; border-radius:var(--md-radius-full); padding:3px 12px; font-family:var(--font-body); font-size:0.72rem; font-weight:600; }
-.sev-low    { display:inline-block; background:var(--md-tertiary-container); color:var(--md-tertiary); border-radius:var(--md-radius-full); padding:3px 12px; font-family:var(--font-body); font-size:0.72rem; font-weight:600; }
-
-/* Chips */
-.chip { display:inline-block; border-radius:var(--md-radius-full); padding:3px 12px; font-family:var(--font-body); font-size:0.78rem; font-weight:500; margin:2px 3px 2px 0; border:1px solid transparent; cursor:default; }
-.chip-error   { background:var(--md-error-container); color:var(--md-error); border-color:rgba(217,48,37,0.2); }
-.chip-primary { background:var(--md-primary-container); color:var(--md-primary); border-color:rgba(26,115,232,0.2); }
-.chip-success { background:var(--md-tertiary-container); color:var(--md-tertiary); border-color:rgba(19,115,51,0.2); }
-.chip-warning { background:var(--md-warning-container); color:#b06000; border-color:rgba(242,153,0,0.3); }
-.chip-neutral { background:var(--md-surface-variant); color:var(--md-on-surface-variant); border-color:var(--md-outline); }
-
-/* Step indicator */
-.step-bar { display:flex; gap:4px; margin:0.75rem 0; }
-.step-item {
-    flex:1; background:var(--md-surface-variant);
-    border-radius:var(--md-radius-sm);
-    padding: 0.55rem 0.7rem;
-    text-align:center;
-    transition: all 0.25s ease;
-    border: 1px solid transparent;
-}
-.step-item.active { background:var(--md-primary-container); border-color:rgba(26,115,232,0.3); }
-.step-item.done   { background:var(--md-tertiary-container); border-color:rgba(19,115,51,0.2); }
-.step-num   { font-family:var(--font-body); font-size:0.58rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--md-on-surface-muted); margin-bottom:2px; }
-.step-label { font-family:var(--font-body); font-size:0.73rem; font-weight:500; color:var(--md-on-surface-variant); }
-.step-item.active .step-num  { color:var(--md-primary); }
-.step-item.active .step-label{ color:var(--md-primary); font-weight:600; }
-.step-item.done   .step-num  { color:var(--md-tertiary); }
-.step-item.done   .step-label{ color:var(--md-tertiary); }
-
-/* Recommendation list */
-.rec-item {
-    display:flex; gap:0.9rem; align-items:flex-start;
-    background:var(--md-surface);
-    border:1px solid var(--md-outline);
-    border-radius:var(--md-radius-md);
-    padding:0.9rem 1.1rem;
-    margin-bottom:0.5rem;
-    transition:box-shadow 0.2s;
-}
-.rec-item:hover { box-shadow: var(--md-elev-1); }
-.rec-num {
-    background:var(--md-primary);
-    color:var(--md-on-primary);
-    border-radius:var(--md-radius-xs);
-    min-width:22px; height:22px;
-    display:flex; align-items:center; justify-content:center;
-    font-family:var(--font-mono); font-size:0.7rem; font-weight:600;
-    flex-shrink:0; margin-top:1px;
-}
-.rec-text { font-family:var(--font-body); font-size:0.9rem; color:var(--md-on-surface-variant); line-height:1.55; }
-
-/* Highlight box */
-.highlight-box {
-    font-family:var(--font-body); font-size:0.9rem; line-height:1.8;
-    color:var(--md-on-surface-variant);
-    background:var(--md-surface);
-    border:1px solid var(--md-outline);
-    border-radius:var(--md-radius-md);
-    padding:1.2rem 1.5rem;
-}
-.highlight-box mark {
-    background:rgba(217,48,37,0.12);
-    color:var(--md-error);
-    border-radius:3px;
-    padding:1px 4px;
-    border-bottom:1.5px solid rgba(217,48,37,0.35);
-}
-
-/* Appeal box */
-.appeal-box {
-    background:var(--md-surface);
-    border:1px solid var(--md-outline);
-    border-left:4px solid var(--md-primary);
-    border-radius:var(--md-radius-md);
-    padding:1.5rem 1.8rem;
-    font-family:var(--font-mono);
-    font-size:0.8rem;
-    line-height:1.85;
-    color:var(--md-on-surface-variant);
-    white-space:pre-wrap;
-}
-
-/* Timeline */
-.timeline { position:relative; padding-left:20px; }
-.timeline::before {
-    content:''; position:absolute; left:7px; top:8px; bottom:8px;
-    width:2px; background:var(--md-outline);
-}
-.timeline-item { position:relative; margin-bottom:1rem; }
-.timeline-item::before {
-    content:''; position:absolute; left:-16px; top:5px;
-    width:10px; height:10px;
-    border-radius:50%;
-    background:var(--md-primary);
-    border:2px solid var(--md-surface);
-    box-shadow:0 0 0 2px var(--md-primary);
-}
-.timeline-item.done::before { background:var(--md-tertiary); box-shadow:0 0 0 2px var(--md-tertiary); }
-.timeline-time { font-family:var(--font-mono); font-size:0.68rem; color:var(--md-on-surface-muted); margin-bottom:2px; }
-.timeline-text { font-family:var(--font-body); font-size:0.85rem; color:var(--md-on-surface-variant); }
-
-/* Duplicate warning */
-.dup-warn {
-    background:var(--md-warning-container);
-    border:1px solid rgba(242,153,0,0.4);
-    border-left:4px solid var(--md-warning);
-    border-radius:var(--md-radius-md);
-    padding:0.9rem 1.2rem;
-    font-family:var(--font-body);
-    font-size:0.87rem;
-    color:#7a4a00;
-    margin-bottom:1rem;
-}
-
-/* API key error */
-.key-error {
-    background:var(--md-error-container);
-    border:1px solid rgba(217,48,37,0.3);
-    border-left:4px solid var(--md-error);
-    border-radius:var(--md-radius-md);
-    padding:1rem 1.4rem;
-    font-family:var(--font-body);
-    font-size:0.9rem;
-    color:var(--md-on-error-container);
-    margin-bottom:1.2rem;
-}
-.key-error code {
-    background:rgba(217,48,37,0.1);
-    padding:2px 6px;
-    border-radius:4px;
-    font-family:var(--font-mono);
-    font-size:0.82rem;
-}
-
-/* Empty states */
-.empty-state { text-align:center; padding:4rem 2rem; }
-.empty-illustration { font-size:3.5rem; margin-bottom:1rem; opacity:0.6; }
-.empty-title { font-family:var(--font-display); font-size:1.15rem; font-weight:600; color:var(--md-on-surface); margin-bottom:0.4rem; }
-.empty-sub   { font-family:var(--font-body); font-size:0.875rem; color:var(--md-on-surface-variant); line-height:1.6; max-width:360px; margin:0 auto; }
-
-/* Law item */
-.law-item {
-    display:flex; gap:0.65rem; align-items:flex-start;
-    padding:0.6rem 0;
-    border-bottom:1px solid var(--md-outline-variant);
-    font-family:var(--font-body); font-size:0.875rem;
-    color:var(--md-on-surface-variant);
-}
-.law-item:last-child { border-bottom:none; }
-.law-gavel { color:var(--md-primary); font-size:1rem; flex-shrink:0; margin-top:1px; }
-
-/* KPI card */
-.kpi-card {
-    background:var(--md-surface);
-    border-radius:var(--md-radius-lg);
-    padding:1.3rem 1.5rem;
-    box-shadow:var(--md-elev-1);
-    display:flex; flex-direction:column; gap:0.25rem;
-}
-.kpi-label { font-family:var(--font-body); font-size:0.75rem; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--md-on-surface-variant); }
-.kpi-value { font-family:var(--font-display); font-size:2.1rem; font-weight:700; color:var(--md-on-surface); line-height:1.1; }
-.kpi-delta { font-family:var(--font-body); font-size:0.78rem; display:flex; align-items:center; gap:4px; }
-.kpi-delta.up   { color:var(--md-tertiary); }
-.kpi-delta.down { color:var(--md-error); }
-.kpi-delta.neutral { color:var(--md-on-surface-variant); }
-
-/* Footer */
-.vw-footer {
-    text-align:center;
-    font-family:var(--font-body);
-    font-size:0.75rem;
-    color:var(--md-on-surface-muted);
-    margin-top:4rem;
-    padding:1.5rem 0;
-    border-top:1px solid var(--md-outline);
-    letter-spacing:0.01em;
-}
-
-/* Sidebar nav item */
-.sidebar-nav-item {
-    display:flex; align-items:center; gap:10px;
-    padding:8px 12px; border-radius:var(--md-radius-full);
-    font-family:var(--font-body); font-size:0.875rem; font-weight:500;
-    color:var(--md-on-surface-variant);
-    cursor:pointer;
-    transition:background 0.15s;
-    margin-bottom:2px;
-}
-.sidebar-nav-item:hover { background:var(--md-surface-variant); }
-.sidebar-nav-item.active { background:var(--md-primary-container); color:var(--md-on-primary-container); }
-
-/* How it works step */
-.how-step {
-    display:flex; gap:12px; align-items:flex-start;
-    padding:6px 0;
-}
-.how-step-num {
-    background:var(--md-primary);
-    color:var(--md-on-primary);
-    border-radius:50%; width:22px; height:22px;
-    display:flex; align-items:center; justify-content:center;
-    font-family:var(--font-mono); font-size:0.68rem; font-weight:700;
-    flex-shrink:0; margin-top:1px;
-}
-.how-step-text { font-family:var(--font-body); font-size:0.8rem; color:var(--md-on-surface-variant); line-height:1.4; }
-
-/* Sidebar example button override */
+/* Sidebar buttons — ghost style */
 div[data-testid="stSidebar"] .stButton > button {
-    background: var(--md-surface-variant) !important;
-    color: var(--md-on-surface) !important;
+    background: var(--surf-2) !important;
+    color: var(--t1) !important;
     box-shadow: none !important;
-    border-radius: var(--md-radius-full) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--r-md) !important;
     font-size: 0.82rem !important;
-    padding: 0.45rem 1rem !important;
-    text-align: left !important;
+    padding: 0.45rem 0.9rem !important;
     width: 100% !important;
-    justify-content: flex-start !important;
-    border: 1px solid var(--md-outline) !important;
+    text-align: left !important;
+    transform: none !important;
 }
 div[data-testid="stSidebar"] .stButton > button:hover {
-    background: var(--md-surface-container) !important;
+    background: var(--surf-3) !important;
     box-shadow: none !important;
     transform: none !important;
 }
 
-/* Badge pill */
-.badge-ok  { display:inline-flex; align-items:center; gap:5px; background:var(--md-tertiary-container); color:var(--md-tertiary); border-radius:var(--md-radius-full); padding:4px 12px; font-family:var(--font-body); font-size:0.72rem; font-weight:600; }
-.badge-err { display:inline-flex; align-items:center; gap:5px; background:var(--md-error-container); color:var(--md-error); border-radius:var(--md-radius-full); padding:4px 12px; font-family:var(--font-body); font-size:0.72rem; font-weight:600; }
+/* ══ INPUTS ══ */
+.stTextArea textarea {
+    font-family: var(--ff-body) !important;
+    font-size: 0.92rem !important;
+    background: var(--surf) !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: var(--r-md) !important;
+    color: var(--t1) !important;
+    line-height: 1.65 !important;
+    transition: border-color 0.2s !important;
+    padding: 14px 16px !important;
+    resize: vertical !important;
+}
+.stTextArea textarea:focus {
+    border-color: var(--p) !important;
+    box-shadow: 0 0 0 3px rgba(26,115,232,0.1) !important;
+    outline: none !important;
+}
+.stTextArea label, .stSelectbox label, .stTextInput label {
+    font-family: var(--ff-body) !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    color: var(--t2) !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+}
+.stSelectbox > div > div {
+    background: var(--surf) !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: var(--r-sm) !important;
+    color: var(--t1) !important;
+    font-family: var(--ff-body) !important;
+    font-size: 0.875rem !important;
+    transition: border-color 0.15s !important;
+}
+.stSelectbox > div > div:focus-within { border-color: var(--p) !important; }
+[data-testid="stFileUploader"] {
+    background: var(--surf) !important;
+    border: 2px dashed var(--border) !important;
+    border-radius: var(--r-md) !important;
+    transition: border-color 0.15s !important;
+}
+[data-testid="stFileUploader"]:hover { border-color: var(--p) !important; }
 
-/* Compare winner */
-.winner-banner {
-    background:var(--md-primary-container);
-    border-radius:var(--md-radius-lg);
-    padding:1rem 1.4rem;
-    text-align:center;
-    font-family:var(--font-display);
-    font-size:0.95rem;
-    font-weight:600;
-    color:var(--md-on-primary-container);
-    margin-bottom:1.2rem;
-    box-shadow:var(--md-elev-1);
+/* ══ METRICS ══ */
+[data-testid="metric-container"] {
+    background: var(--surf);
+    border: none;
+    border-radius: var(--r-lg);
+    padding: 1.1rem 1.4rem;
+    box-shadow: var(--sh1);
+}
+[data-testid="metric-container"] label {
+    font-family: var(--ff-body) !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.05em !important;
+    text-transform: uppercase !important;
+    color: var(--t2) !important;
+}
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-family: var(--ff-body) !important;
+    font-weight: 700 !important;
+    font-size: 1.75rem !important;
+    color: var(--t1) !important;
 }
 
-/* Scan progress bar */
-@keyframes scan-slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
-.scan-progress-track { background:var(--md-surface-container); border-radius:2px; height:4px; overflow:hidden; margin:6px 0; }
-.scan-progress-fill  { height:100%; background:var(--md-primary); border-radius:2px; animation:scan-slide 1.6s ease-in-out infinite; width:25%; }
+/* ══ PROGRESS ══ */
+.stProgress > div > div { background: var(--p) !important; border-radius: 2px; }
+.stProgress > div { background: var(--surf-3) !important; border-radius: 2px; }
 
-/* Quality bar */
-.quality-track { background:var(--md-surface-container); height:3px; border-radius:2px; margin-top:5px; overflow:hidden; }
-.quality-fill  { height:100%; border-radius:2px; transition:width 0.4s ease; }
+/* ══ DOWNLOAD BUTTON ══ */
+.stDownloadButton > button {
+    background: var(--surf) !important;
+    color: var(--p) !important;
+    border: 1.5px solid var(--p) !important;
+    border-radius: var(--r-full) !important;
+    font-family: var(--ff-body) !important;
+    font-weight: 500 !important;
+    font-size: 0.855rem !important;
+    box-shadow: none !important;
+    padding: 0.5rem 1.4rem !important;
+    transition: background 0.15s !important;
+}
+.stDownloadButton > button:hover {
+    background: rgba(26,115,232,0.06) !important;
+    transform: none !important;
+}
 
-/* Divider */
-.md3-divider { border:none; border-top:1px solid var(--md-outline); margin:1.25rem 0; }
+/* ══ EXPANDER ══ */
+.streamlit-expanderHeader {
+    font-family: var(--ff-body) !important;
+    font-weight: 500 !important;
+    font-size: 0.875rem !important;
+    background: var(--surf) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--t1) !important;
+    border-radius: var(--r-sm) !important;
+    padding: 0.8rem 1rem !important;
+}
+.streamlit-expanderContent {
+    background: var(--surf) !important;
+    border: 1px solid var(--border) !important;
+    border-top: none !important;
+    border-radius: 0 0 var(--r-sm) var(--r-sm) !important;
+    padding: 1rem !important;
+}
 
-/* Preview box */
+/* ══ DATAFRAME ══ */
+[data-testid="stDataFrame"] { border-radius: var(--r-md) !important; overflow: hidden; }
+
+/* ═══════════════════════════════════════════
+   V8 COMPONENTS
+═══════════════════════════════════════════ */
+
+/* ── App Bar ── */
+.vw-appbar {
+    background: var(--surf);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 1px 0 var(--border);
+    margin: -1rem -1rem 2rem;
+}
+.vw-logo {
+    width: 32px; height: 32px;
+    background: var(--p);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+}
+.vw-appbar-title {
+    font-family: var(--ff-body);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--t1);
+    letter-spacing: -0.02em;
+}
+.vw-appbar-sub {
+    font-family: var(--ff-body);
+    font-size: 0.75rem;
+    color: var(--t3);
+    margin-top: 1px;
+}
+.vw-badge {
+    margin-left: auto;
+    background: var(--p-lt);
+    color: var(--p-dk);
+    font-family: var(--ff-body);
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: var(--r-full);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* ── Sidebar Header ── */
+.vw-sidebar-hd {
+    background: linear-gradient(140deg, var(--p) 0%, var(--p-dk) 100%);
+    padding: 22px 18px 18px;
+    margin: -1rem -1rem 1.25rem;
+}
+.vw-sidebar-name {
+    font-family: var(--ff-body);
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.02em;
+}
+.vw-sidebar-tag {
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.7);
+    margin-top: 2px;
+    font-family: var(--ff-body);
+}
+.vw-api-ok {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    border-radius: var(--r-full);
+    padding: 3px 10px;
+    font-size: 0.68rem; font-weight: 500; font-family: var(--ff-body);
+    margin-top: 10px;
+}
+.vw-api-err {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(252,210,207,0.4);
+    color: #fce8e6;
+    border-radius: var(--r-full);
+    padding: 3px 10px;
+    font-size: 0.68rem; font-weight: 500; font-family: var(--ff-body);
+    margin-top: 10px;
+}
+
+/* ── Section Label ── */
+.vw-label {
+    font-family: var(--ff-body);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--t3);
+    margin-bottom: 10px;
+    margin-top: 2px;
+}
+
+/* ── Cards ── */
+.card {
+    background: var(--surf);
+    border-radius: var(--r-lg);
+    border: 1px solid var(--border);
+    padding: 1.1rem 1.3rem;
+    transition: box-shadow 0.15s;
+    margin-bottom: 10px;
+}
+.card:hover { box-shadow: var(--sh1); }
+.card.no-border { border: none; box-shadow: var(--sh1); }
+.card.e-fill  { background: var(--e-lt); border-color: rgba(197,34,31,0.2); }
+.card.s-fill  { background: var(--s-lt); border-color: rgba(19,115,51,0.2); }
+.card.w-fill  { background: var(--w-lt); border-color: rgba(227,116,0,0.2); }
+.card.p-fill  { background: var(--p-lt); border-color: rgba(26,115,232,0.2); }
+.card.muted   { background: var(--surf-2); border-color: var(--border-lt); }
+
+.card-label {
+    font-family: var(--ff-body);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--t3);
+    margin-bottom: 6px;
+}
+.card-value {
+    font-family: var(--ff-body);
+    font-size: 0.9rem;
+    color: var(--t1);
+    line-height: 1.5;
+}
+.card-value.mono  { font-family: var(--ff-mono); font-size: 0.88rem; }
+.card-value.large { font-size: 1.35rem; font-weight: 700; }
+
+/* ── Verdict Banner ── */
+.v-banner {
+    border-radius: var(--r-xl);
+    padding: 2rem 2.5rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+.v-banner.bias {
+    background: var(--e-lt);
+    border: 1.5px solid rgba(197,34,31,0.25);
+}
+.v-banner.clean {
+    background: var(--s-lt);
+    border: 1.5px solid rgba(19,115,51,0.2);
+}
+.v-banner-icon { font-size: 2.5rem; line-height: 1; margin-bottom: 10px; }
+.v-banner-title {
+    font-family: var(--ff-body);
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 4px;
+}
+.v-banner.bias  .v-banner-title { color: var(--e); }
+.v-banner.clean .v-banner-title { color: var(--s); }
+.v-banner-sub {
+    font-family: var(--ff-body);
+    font-size: 0.875rem;
+    color: var(--t2);
+}
+
+/* ── Risk Ring ── */
+.ring-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem 0 0.25rem;
+    gap: 8px;
+}
+.ring-sev {
+    font-family: var(--ff-body);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+/* ── Chips ── */
+.chip {
+    display: inline-block;
+    border-radius: var(--r-full);
+    padding: 3px 11px;
+    font-family: var(--ff-body);
+    font-size: 0.78rem;
+    font-weight: 500;
+    margin: 2px 3px 2px 0;
+    border: 1px solid transparent;
+}
+.chip-e { background: var(--e-lt); color: var(--e); border-color: rgba(197,34,31,0.2); }
+.chip-p { background: var(--p-lt); color: var(--p-dk); border-color: rgba(26,115,232,0.2); }
+.chip-s { background: var(--s-lt); color: var(--s); border-color: rgba(19,115,51,0.2); }
+.chip-w { background: var(--w-lt); color: var(--w); border-color: rgba(227,116,0,0.25); }
+.chip-n { background: var(--surf-2); color: var(--t2); border-color: var(--border); }
+
+/* ── Severity badges ── */
+.sev { display:inline-block; border-radius:var(--r-full); padding:3px 12px; font-family:var(--ff-body); font-size:0.72rem; font-weight:600; }
+.sev-h { background:var(--e-lt); color:var(--e); }
+.sev-m { background:var(--w-lt); color:var(--w); }
+.sev-l { background:var(--s-lt); color:var(--s); }
+
+/* ── Steps ── */
+.step-bar { display:flex; gap:6px; margin:10px 0 6px; }
+.step-item {
+    flex:1; background:var(--surf-2); border-radius:var(--r-sm);
+    padding:0.5rem 0.6rem; text-align:center;
+    transition:all 0.2s; border:1px solid transparent;
+}
+.step-item.active { background:var(--p-lt); border-color:rgba(26,115,232,0.25); }
+.step-item.done   { background:var(--s-lt); border-color:rgba(19,115,51,0.2); }
+.step-n  { font-size:0.55rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--t3); margin-bottom:2px; font-family:var(--ff-body); }
+.step-l  { font-size:0.72rem; font-weight:500; color:var(--t2); font-family:var(--ff-body); }
+.step-item.active .step-n { color:var(--p); }
+.step-item.active .step-l { color:var(--p); font-weight:600; }
+.step-item.done .step-n   { color:var(--s); }
+.step-item.done .step-l   { color:var(--s); }
+
+/* ── Scan progress ── */
+@keyframes scan-slide { 0%{transform:translateX(-120%)} 100%{transform:translateX(400%)} }
+.scan-track { background:var(--surf-3); border-radius:2px; height:3px; overflow:hidden; margin:4px 0; }
+.scan-fill  { height:100%; background:var(--p); border-radius:2px; animation:scan-slide 1.4s ease-in-out infinite; width:30%; }
+.scan-status { font-family:var(--ff-body); font-size:0.8rem; color:var(--p); font-weight:500; }
+
+/* ── Highlight box ── */
+.hl-box {
+    font-family:var(--ff-body); font-size:0.9rem; line-height:1.8;
+    color:var(--t2); background:var(--surf); border:1px solid var(--border);
+    border-radius:var(--r-md); padding:1.1rem 1.4rem;
+}
+.hl-box mark {
+    background:rgba(197,34,31,0.1); color:var(--e);
+    border-radius:3px; padding:1px 4px;
+    border-bottom:1.5px solid rgba(197,34,31,0.3);
+}
+.hl-caption { font-family:var(--ff-body); font-size:0.71rem; color:var(--t3); margin-top:5px; }
+
+/* ── Rec items ── */
+.rec {
+    display:flex; gap:12px; align-items:flex-start;
+    background:var(--surf); border:1px solid var(--border);
+    border-radius:var(--r-md); padding:0.85rem 1.1rem;
+    margin-bottom:8px; transition:box-shadow 0.15s;
+}
+.rec:hover { box-shadow:var(--sh1); }
+.rec-num {
+    background:var(--p); color:var(--on-p);
+    border-radius:var(--r-xs); min-width:22px; height:22px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--ff-mono); font-size:0.7rem; font-weight:600;
+    flex-shrink:0; margin-top:1px;
+}
+.rec-text { font-family:var(--ff-body); font-size:0.875rem; color:var(--t2); line-height:1.55; }
+
+/* ── Law items ── */
+.law {
+    display:flex; gap:10px; align-items:center;
+    padding:8px 0; border-bottom:1px solid var(--border-lt);
+    font-family:var(--ff-body); font-size:0.875rem; color:var(--t2);
+}
+.law:last-child { border-bottom:none; }
+.law-icon { color:var(--p); flex-shrink:0; }
+
+/* ── Appeal box ── */
+.appeal-box {
+    background:var(--surf); border:1px solid var(--border);
+    border-left:3px solid var(--p); border-radius:var(--r-md);
+    padding:1.4rem 1.6rem;
+    font-family:var(--ff-mono); font-size:0.8rem; line-height:1.9;
+    color:var(--t2); white-space:pre-wrap;
+}
+
+/* ── Duplicate warning ── */
+.dup-warn {
+    display:flex; align-items:flex-start; gap:12px;
+    background:var(--w-lt); border:1px solid rgba(227,116,0,0.3);
+    border-radius:var(--r-md); padding:1rem 1.2rem;
+    font-family:var(--ff-body); font-size:0.875rem; color:var(--on-w-lt);
+    margin-bottom:1.25rem;
+}
+.dup-icon { font-size:1.2rem; flex-shrink:0; }
+.dup-text strong { font-weight:600; display:block; margin-bottom:2px; }
+
+/* ── API key error ── */
+.key-err {
+    background:var(--e-lt); border:1px solid rgba(197,34,31,0.25);
+    border-left:3px solid var(--e); border-radius:var(--r-md);
+    padding:1rem 1.3rem; font-family:var(--ff-body); font-size:0.875rem;
+    color:var(--on-e-lt); margin-bottom:1.25rem;
+}
+.key-err code {
+    background:rgba(197,34,31,0.1); padding:2px 6px; border-radius:4px;
+    font-family:var(--ff-mono); font-size:0.82rem;
+}
+
+/* ── Empty state ── */
+.empty { text-align:center; padding:4rem 2rem; }
+.empty-ico { font-size:3rem; margin-bottom:12px; opacity:.5; }
+.empty-title { font-family:var(--ff-body); font-size:1.1rem; font-weight:600; color:var(--t1); margin-bottom:6px; }
+.empty-sub   { font-family:var(--ff-body); font-size:0.875rem; color:var(--t2); line-height:1.6; max-width:340px; margin:0 auto; }
+
+/* ── KPI card ── */
+.kpi { background:var(--surf); border-radius:var(--r-lg); padding:1.2rem 1.4rem; box-shadow:var(--sh1); }
+.kpi-l { font-family:var(--ff-body); font-size:0.7rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--t3); }
+.kpi-v { font-family:var(--ff-body); font-size:1.9rem; font-weight:700; color:var(--t1); line-height:1.1; }
+.kpi-d { font-family:var(--ff-body); font-size:0.75rem; color:var(--t3); }
+
+/* ── How it works ── */
+.how-step { display:flex; gap:10px; align-items:flex-start; padding:5px 0; }
+.how-n {
+    background:var(--p); color:var(--on-p);
+    border-radius:50%; width:20px; height:20px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--ff-mono); font-size:0.65rem; font-weight:700;
+    flex-shrink:0; margin-top:1px;
+}
+.how-t { font-family:var(--ff-body); font-size:0.79rem; color:var(--t2); line-height:1.4; }
+
+/* ── Winner banner ── */
+.winner {
+    background:var(--p-lt); border-radius:var(--r-lg); padding:1rem 1.4rem;
+    text-align:center; font-family:var(--ff-body); font-size:0.95rem;
+    font-weight:600; color:var(--on-p-lt); margin-bottom:1.2rem;
+    box-shadow:var(--sh1);
+}
+
+/* ── Preview box ── */
 .preview-box {
-    background:var(--md-surface-variant);
-    border-radius:var(--md-radius-sm);
-    padding:0.75rem 1rem;
-    font-family:var(--font-mono);
-    font-size:0.77rem;
-    color:var(--md-on-surface-variant);
-    line-height:1.6;
-    white-space:pre-wrap;
-    max-height:80px;
-    overflow:hidden;
-    border:1px solid var(--md-outline);
+    background:var(--surf-2); border-radius:var(--r-sm);
+    padding:0.7rem 0.9rem; font-family:var(--ff-mono); font-size:0.77rem;
+    color:var(--t2); line-height:1.6; white-space:pre-wrap;
+    max-height:80px; overflow:hidden; border:1px solid var(--border);
 }
 
-/* Feature table */
-.feature-row {
+/* ── Divider ── */
+.divider { border:none; border-top:1px solid var(--border); margin:1.5rem 0; }
+
+/* ── Feature rows ── */
+.feat-row {
     display:flex; justify-content:space-between; align-items:center;
-    padding:8px 0;
-    border-bottom:1px solid var(--md-outline-variant);
-    font-family:var(--font-body); font-size:0.84rem;
+    padding:7px 0; border-bottom:1px solid var(--border-lt);
+    font-family:var(--ff-body); font-size:0.84rem;
 }
-.feature-row:last-child { border-bottom:none; }
-.feature-name  { color:var(--md-on-surface); font-weight:500; }
-.feature-desc  { color:var(--md-on-surface-variant); font-size:0.78rem; }
-.feature-check { color:var(--md-tertiary); font-weight:700; }
+.feat-row:last-child { border-bottom:none; }
+.feat-name  { color:var(--t1); font-weight:500; }
+.feat-desc  { color:var(--t2); font-size:0.78rem; }
+.feat-check { color:var(--s); font-weight:700; }
 
-/* About hero */
+/* ── About hero ── */
 .about-hero {
-    background:linear-gradient(135deg, var(--md-primary) 0%, #1557b0 100%);
-    border-radius:var(--md-radius-xl);
-    padding:2.5rem 2.5rem;
-    color:#fff;
-    margin-bottom:1.5rem;
+    background:linear-gradient(140deg, var(--p) 0%, var(--p-dk) 100%);
+    border-radius:var(--r-xl); padding:2.5rem; color:#fff; margin-bottom:1.5rem;
 }
-.about-hero h2 { font-family:var(--font-display); font-size:1.8rem; font-weight:700; letter-spacing:-0.02em; margin:0 0 0.5rem; }
-.about-hero p  { font-family:var(--font-body); font-size:0.9rem; opacity:0.85; line-height:1.7; margin:0; }
+.about-hero h2 { font-family:var(--ff-body); font-size:1.65rem; font-weight:700; letter-spacing:-.03em; margin:0 0 10px; }
+.about-hero p  { font-family:var(--ff-body); font-size:0.9rem; opacity:.85; line-height:1.7; margin:0; }
+
+/* ── Char counter ── */
+.char-counter { padding-top:0.5rem; }
+.char-count { font-family:var(--ff-body); font-size:0.8rem; font-weight:500; }
+.char-track { background:var(--surf-3); height:3px; border-radius:2px; margin-top:5px; overflow:hidden; }
+.char-fill  { height:100%; border-radius:2px; transition:width 0.3s; }
+
+/* ── Char quality colours ── */
+.cc-ok  { color:var(--s); }
+.cc-mid { color:var(--w); }
+.cc-bad { color:var(--e); }
+
+/* ── Sidebar section label ── */
+.sb-label {
+    font-family:var(--ff-body); font-size:0.68rem; font-weight:700;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--t3);
+    margin:14px 0 8px;
+}
+
+/* ── Footer ── */
+.vw-footer {
+    text-align:center; font-family:var(--ff-body); font-size:0.73rem;
+    color:var(--t3); margin-top:4rem; padding:1.5rem 0;
+    border-top:1px solid var(--border);
+}
+
+/* ── Info badge ── */
+.badge-ok  { display:inline-flex; align-items:center; gap:5px; background:var(--s-lt); color:var(--s); border-radius:var(--r-full); padding:4px 12px; font-family:var(--ff-body); font-size:0.72rem; font-weight:600; }
+.badge-err { display:inline-flex; align-items:center; gap:5px; background:var(--e-lt); color:var(--e); border-radius:var(--r-full); padding:4px 12px; font-family:var(--ff-body); font-size:0.72rem; font-weight:600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -868,9 +771,7 @@ BIAS_KW = {
 }
 
 BIAS_DIMS = ["Gender", "Age", "Racial", "Geographic", "Socioeconomic", "Language", "Insurance"]
-
-CHIP_COLORS = ["chip-error", "chip-warning", "chip-primary", "chip-success", "chip-neutral",
-               "chip-primary", "chip-warning"]
+CHIP_COLORS = ["chip-e", "chip-w", "chip-p", "chip-s", "chip-n", "chip-p", "chip-w"]
 
 # ─────────────────────────────────────────────
 # SESSION STATE
@@ -897,7 +798,7 @@ def _api_key_ok():
 
 def _api_key_banner():
     st.markdown(
-        '<div class="key-error">⚠️ <strong>GROQ_API_KEY not found.</strong> '
+        '<div class="key-err">⚠️ <strong>GROQ_API_KEY not found.</strong> '
         'Add it to your <code>.env</code> file:<br>'
         '<code style="display:block;margin-top:6px;">GROQ_API_KEY=gsk_your_key_here</code><br>'
         'Get a free key at <strong>console.groq.com</strong> then restart the app.</div>',
@@ -912,7 +813,7 @@ def get_all_reports():
 
 def chips_html(items, style="auto"):
     if not items:
-        return '<span class="chip chip-neutral">None detected</span>'
+        return '<span class="chip chip-n">None detected</span>'
     html = ""
     for i, item in enumerate(items):
         cls = CHIP_COLORS[i % len(CHIP_COLORS)] if style == "auto" else style
@@ -932,43 +833,37 @@ def highlight_text(text, bias_phrases, bias_types):
                              out, flags=re.IGNORECASE)
     return out
 
-def severity_badge(conf, bias_found):
-    if not bias_found:
-        return '<span class="sev-low">Low Risk</span>'
-    if conf >= 0.75:
-        return '<span class="sev-high">High Severity</span>'
-    if conf >= 0.45:
-        return '<span class="sev-medium">Medium Severity</span>'
-    return '<span class="sev-low">Low Severity</span>'
+def severity_label(conf, bias_found):
+    if not bias_found: return '<span class="sev sev-l">Low Risk</span>'
+    if conf >= 0.75:   return '<span class="sev sev-h">High Severity</span>'
+    if conf >= 0.45:   return '<span class="sev sev-m">Medium Severity</span>'
+    return '<span class="sev sev-l">Low Severity</span>'
+
+def severity_desc(conf, bias_found):
+    if not bias_found: return "No strong bias indicators found"
+    if conf >= 0.75:   return "Strong discriminatory signal"
+    if conf >= 0.45:   return "Possible bias patterns present"
+    return "Weak or uncertain bias indicators"
 
 def risk_ring_svg(pct: int, bias_found: bool) -> str:
-    """Render an SVG arc ring showing confidence %."""
-    r      = 52
-    cx     = 70
-    cy     = 70
-    stroke = 10
-    circ   = 2 * 3.14159 * r
-    dash   = circ * pct / 100
-    gap    = circ - dash
-    color  = "#d93025" if bias_found else ("#137333" if pct < 45 else "#f29900")
-    label_color = color
-
-    return f"""
-<svg width="140" height="140" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="{cx}" cy="{cy}" r="{r}" fill="none"
-    stroke="#e8eaed" stroke-width="{stroke}" />
-  <circle cx="{cx}" cy="{cy}" r="{r}" fill="none"
-    stroke="{color}" stroke-width="{stroke}"
-    stroke-dasharray="{dash:.1f} {gap:.1f}"
-    stroke-dashoffset="{circ/4:.1f}"
-    stroke-linecap="round"
-    transform="rotate(-90 {cx} {cy})" />
-  <text x="{cx}" y="{cy - 6}" text-anchor="middle"
-    font-family="'Google Sans Display', sans-serif"
-    font-size="22" font-weight="700" fill="{label_color}">{pct}%</text>
+    r    = 48
+    cx   = 64
+    cy   = 64
+    sw   = 9
+    circ = 2 * 3.14159 * r
+    dash = circ * pct / 100
+    gap  = circ - dash
+    col  = "#c5221f" if bias_found else ("#137333" if pct < 45 else "#e37400")
+    return f"""<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="#e8eaed" stroke-width="{sw}"/>
+  <circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{col}" stroke-width="{sw}"
+    stroke-dasharray="{dash:.1f} {gap:.1f}" stroke-dashoffset="{circ/4:.1f}"
+    stroke-linecap="round" transform="rotate(-90 {cx} {cy})"/>
+  <text x="{cx}" y="{cy - 5}" text-anchor="middle"
+    font-family="'DM Sans',sans-serif" font-size="20" font-weight="700" fill="{col}">{pct}%</text>
   <text x="{cx}" y="{cy + 12}" text-anchor="middle"
-    font-family="'Google Sans', sans-serif"
-    font-size="9.5" font-weight="500" fill="#9aa0a6" letter-spacing="0.05em">CONFIDENCE</text>
+    font-family="'DM Sans',sans-serif" font-size="8.5" font-weight="600"
+    fill="#9aa0a6" letter-spacing="0.06em">CONFIDENCE</text>
 </svg>"""
 
 def extract_text_from_file(uploaded):
@@ -1014,16 +909,13 @@ def _render_steps(ph, current, label):
         else:                cls, icon = "",        str(num)
         parts.append(
             f'<div class="step-item {cls}">'
-            f'<div class="step-num">STEP {icon}</div>'
-            f'<div class="step-label">{lbl}</div></div>'
+            f'<div class="step-n">STEP {icon}</div>'
+            f'<div class="step-l">{lbl}</div></div>'
         )
-    scan_bar = '<div class="scan-progress-track"><div class="scan-progress-fill"></div></div>'
     ph.markdown(
         f'<div class="step-bar">{"".join(parts)}</div>'
-        f'{scan_bar}'
-        f'<div style="font-family:var(--font-body);font-size:0.8rem;'
-        f'color:var(--md-primary);font-weight:500;margin-top:4px;letter-spacing:0.01em;">'
-        f'● {label}</div>',
+        f'<div class="scan-track"><div class="scan-fill"></div></div>'
+        f'<div class="scan-status">● {label}</div>',
         unsafe_allow_html=True,
     )
 
@@ -1036,7 +928,7 @@ def build_txt_report(report, text, dtype):
     laws  = report.get("legal_frameworks", [])
     lines = [
         "=" * 68,
-        "       VERDICT WATCH V7 — BIAS ANALYSIS REPORT",
+        "       VERDICT WATCH V8 — BIAS ANALYSIS REPORT",
         "=" * 68,
         f"Generated  : {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}",
         f"Type       : {dtype.upper()}",
@@ -1062,9 +954,8 @@ def build_txt_report(report, text, dtype):
         lines.append(f"  {i}. {r}")
     if laws:
         lines += ["", "── RELEVANT LEGAL FRAMEWORKS ─────────────────────────────────"]
-        for law in laws:
-            lines.append(f"  • {law}")
-    lines += ["", "=" * 68, "  Verdict Watch V7  ·  Not legal advice", "=" * 68]
+        for law in laws: lines.append(f"  • {law}")
+    lines += ["", "=" * 68, "  Verdict Watch V8  ·  Not legal advice", "=" * 68]
     return "\n".join(lines)
 
 def reports_to_csv(reports):
@@ -1085,17 +976,16 @@ def reports_to_csv(reports):
     return pd.DataFrame(rows).to_csv(index=False)
 
 # ─────────────────────────────────────────────
-# PLOTLY CONFIG — MD3 STYLE
+# PLOTLY CONFIG
 # ─────────────────────────────────────────────
 
 CB = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(family="Google Sans, Roboto, sans-serif", color="#5f6368"),
+    font=dict(family="DM Sans, sans-serif", color="#5f6368"),
     margin=dict(l=12, r=12, t=16, b=12),
 )
-
-MD3_COLORS = ["#1a73e8", "#d93025", "#137333", "#f29900", "#9334e6", "#007b83", "#e52592"]
+MD3_COLORS = ["#1a73e8", "#c5221f", "#137333", "#e37400", "#9334e6", "#007b83", "#e52592"]
 
 def pie_chart(bc, cc):
     total = bc + cc or 2
@@ -1103,20 +993,20 @@ def pie_chart(bc, cc):
         labels=["Bias Detected", "No Bias Found"],
         values=[max(bc, 1), max(cc, 1)],
         hole=0.70,
-        marker=dict(colors=["#d93025", "#137333"], line=dict(color="#ffffff", width=3)),
-        textfont=dict(family="Google Sans, sans-serif", size=11),
+        marker=dict(colors=["#c5221f", "#137333"], line=dict(color="#ffffff", width=3)),
+        textfont=dict(family="DM Sans, sans-serif", size=11),
         textinfo="percent",
         hovertemplate="%{label}: %{value}<extra></extra>",
     ))
     fig.add_annotation(
-        text=f"<b>{total}</b><br><span style='font-size:10px;color:#5f6368'>TOTAL</span>",
+        text=f"<b>{total}</b><br><span style='font-size:10px;color:#9aa0a6'>TOTAL</span>",
         x=0.5, y=0.5,
-        font=dict(family="Google Sans Display, sans-serif", size=22, color="#202124"),
+        font=dict(family="DM Sans, sans-serif", size=22, color="#202124"),
         showarrow=False,
     )
     fig.update_layout(
-        height=260, showlegend=True,
-        legend=dict(font=dict(family="Google Sans, sans-serif", size=11, color="#5f6368"),
+        height=250, showlegend=True,
+        legend=dict(font=dict(family="DM Sans, sans-serif", size=11, color="#5f6368"),
                     bgcolor="rgba(0,0,0,0)", orientation="h", x=0.5, xanchor="center", y=-0.08),
         **CB,
     )
@@ -1124,59 +1014,53 @@ def pie_chart(bc, cc):
 
 def bar_chart(items, title=""):
     counts = Counter(items)
-    if not counts:
-        counts = {"No data": 1}
+    if not counts: counts = {"No data": 1}
     labels, values = zip(*counts.most_common(8))
     fig = go.Figure(go.Bar(
         x=list(values), y=list(labels), orientation="h",
-        marker=dict(color=MD3_COLORS[:len(labels)],
-                    line=dict(width=0),
-                    cornerradius=4),
+        marker=dict(color=MD3_COLORS[:len(labels)], line=dict(width=0), cornerradius=4),
         text=list(values),
-        textfont=dict(family="Google Sans, sans-serif", size=11, color="#5f6368"),
+        textfont=dict(family="DM Sans, sans-serif", size=11, color="#5f6368"),
         textposition="outside",
         hovertemplate="%{y}: %{x}<extra></extra>",
     ))
     fig.update_layout(
         height=max(200, len(labels) * 46 + 60),
         xaxis=dict(showgrid=True, gridcolor="rgba(60,64,67,0.06)",
-                   tickfont=dict(family="Google Sans, sans-serif", size=10), zeroline=False),
-        yaxis=dict(tickfont=dict(family="Google Sans, sans-serif", size=11),
-                   gridcolor="rgba(0,0,0,0)"),
+                   tickfont=dict(family="DM Sans, sans-serif", size=10), zeroline=False),
+        yaxis=dict(tickfont=dict(family="DM Sans, sans-serif", size=11), gridcolor="rgba(0,0,0,0)"),
         bargap=0.38, **CB,
     )
     return fig
 
 def trend_chart(td):
-    if not td:
-        return None
+    if not td: return None
     dates  = [d["date"] for d in td]
     rates  = [d["bias_rate"] for d in td]
     totals = [d["total"] for d in td]
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=dates, y=totals, name="Total Analyses",
-        marker=dict(color="rgba(26,115,232,0.12)", line=dict(width=0), cornerradius=3),
+        marker=dict(color="rgba(26,115,232,0.1)", line=dict(width=0), cornerradius=3),
         hovertemplate="%{x}: %{y} analyses<extra></extra>",
         yaxis="y2",
     ))
     fig.add_trace(go.Scatter(
         x=dates, y=rates, name="Bias Rate %",
         mode="lines+markers",
-        line=dict(color="#d93025", width=2.5),
-        marker=dict(color="#d93025", size=7, line=dict(color="#ffffff", width=1.5)),
+        line=dict(color="#c5221f", width=2.5),
+        marker=dict(color="#c5221f", size=7, line=dict(color="#ffffff", width=1.5)),
         hovertemplate="%{x}: %{y}%<extra></extra>",
     ))
     fig.update_layout(
-        height=260,
-        yaxis=dict(title=dict(text="Bias %", font=dict(size=10)),
-                   range=[0, 105],
-                   tickfont=dict(family="Google Sans, sans-serif", size=9),
+        height=250,
+        yaxis=dict(title=dict(text="Bias %", font=dict(size=10)), range=[0, 105],
+                   tickfont=dict(family="DM Sans, sans-serif", size=9),
                    gridcolor="rgba(60,64,67,0.06)", zeroline=False),
         yaxis2=dict(overlaying="y", side="right", showgrid=False,
-                    tickfont=dict(family="Google Sans, sans-serif", size=9)),
-        xaxis=dict(tickfont=dict(family="Google Sans, sans-serif", size=9)),
-        legend=dict(font=dict(family="Google Sans, sans-serif", size=10, color="#5f6368"),
+                    tickfont=dict(family="DM Sans, sans-serif", size=9)),
+        xaxis=dict(tickfont=dict(family="DM Sans, sans-serif", size=9)),
+        legend=dict(font=dict(family="DM Sans, sans-serif", size=10, color="#5f6368"),
                     bgcolor="rgba(0,0,0,0)", x=0, y=1.08, orientation="h"),
         **CB,
     )
@@ -1187,12 +1071,11 @@ def radar_chart(all_r):
     for r in all_r:
         for bt in r.get("bias_types", []):
             for dim in BIAS_DIMS:
-                if dim.lower() in bt.lower():
-                    dim_counts[dim] += 1
+                if dim.lower() in bt.lower(): dim_counts[dim] += 1
     vals = [dim_counts[d] for d in BIAS_DIMS]
     fig  = go.Figure(go.Scatterpolar(
         r=vals + [vals[0]], theta=BIAS_DIMS + [BIAS_DIMS[0]],
-        fill="toself", fillcolor="rgba(26,115,232,0.08)",
+        fill="toself", fillcolor="rgba(26,115,232,0.07)",
         line=dict(color="#1a73e8", width=2.5),
         marker=dict(color="#1a73e8", size=6),
     ))
@@ -1201,33 +1084,31 @@ def radar_chart(all_r):
             bgcolor="rgba(0,0,0,0)",
             radialaxis=dict(visible=True, color="#dadce0",
                             gridcolor="rgba(60,64,67,0.08)",
-                            tickfont=dict(family="Google Sans, sans-serif", size=9)),
+                            tickfont=dict(family="DM Sans, sans-serif", size=9)),
             angularaxis=dict(color="#9aa0a6",
                              gridcolor="rgba(60,64,67,0.08)",
-                             tickfont=dict(family="Google Sans, sans-serif", size=10)),
+                             tickfont=dict(family="DM Sans, sans-serif", size=10)),
         ),
-        height=310, showlegend=False,
+        height=300, showlegend=False,
         margin=dict(l=44, r=44, t=24, b=24),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Google Sans, sans-serif"),
+        font=dict(family="DM Sans, sans-serif"),
     )
     return fig
 
 def histogram_chart(scores):
-    if not scores:
-        scores = [0]
+    if not scores: scores = [0]
     fig = go.Figure(go.Histogram(
         x=[s * 100 for s in scores], nbinsx=10,
-        marker=dict(color="#1a73e8", opacity=0.7,
-                    line=dict(color="#ffffff", width=1)),
+        marker=dict(color="#1a73e8", opacity=0.7, line=dict(color="#ffffff", width=1)),
         hovertemplate="~%{x:.0f}%%: %{y}<extra></extra>",
     ))
     fig.update_layout(
         height=220,
         xaxis=dict(title=dict(text="Confidence %", font=dict(size=10)),
-                   tickfont=dict(family="Google Sans, sans-serif", size=10),
+                   tickfont=dict(family="DM Sans, sans-serif", size=10),
                    gridcolor="rgba(60,64,67,0.06)"),
-        yaxis=dict(tickfont=dict(family="Google Sans, sans-serif", size=10),
+        yaxis=dict(tickfont=dict(family="DM Sans, sans-serif", size=10),
                    gridcolor="rgba(60,64,67,0.06)"),
         **CB,
     )
@@ -1237,35 +1118,32 @@ def severity_donut(all_r):
     sc = {"high": 0, "medium": 0, "low": 0}
     for r in all_r:
         s = r.get("severity", "low").lower()
-        if s in sc:
-            sc[s] += 1
+        if s in sc: sc[s] += 1
     fig = go.Figure(go.Pie(
         labels=["High", "Medium", "Low"],
         values=[sc["high"], sc["medium"], sc["low"]],
         hole=0.68,
-        marker=dict(colors=["#d93025", "#f29900", "#137333"],
-                    line=dict(color="#ffffff", width=3)),
-        textfont=dict(family="Google Sans, sans-serif", size=11),
+        marker=dict(colors=["#c5221f", "#e37400", "#137333"], line=dict(color="#ffffff", width=3)),
+        textfont=dict(family="DM Sans, sans-serif", size=11),
         textinfo="percent+label",
         hovertemplate="%{label}: %{value}<extra></extra>",
     ))
-    fig.update_layout(height=250, showlegend=False, **CB)
+    fig.update_layout(height=240, showlegend=False, **CB)
     return fig
 
 def gauge_chart(value, bias_found):
-    color = "#d93025" if bias_found else "#137333"
+    color = "#c5221f" if bias_found else "#137333"
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=round(value * 100),
-        number={"suffix": "%",
-                "font": {"family": "Google Sans Display, sans-serif", "size": 28, "color": color}},
+        number={"suffix": "%", "font": {"family": "DM Sans, sans-serif", "size": 28, "color": color}},
         gauge={
             "axis": {"range": [0, 100], "tickwidth": 0,
                      "tickfont": {"color": "#dadce0", "size": 8}},
             "bar":  {"color": color, "thickness": 0.22},
             "bgcolor": "#f1f3f4", "borderwidth": 0,
-            "steps": [{"range": [0,  33], "color": "rgba(19,115,51,0.06)"},
-                      {"range": [33, 66], "color": "rgba(242,153,0,0.06)"},
-                      {"range": [66,100], "color": "rgba(217,48,37,0.06)"}],
+            "steps": [{"range": [0, 33],   "color": "rgba(19,115,51,0.06)"},
+                      {"range": [33, 66],  "color": "rgba(227,116,0,0.06)"},
+                      {"range": [66, 100], "color": "rgba(197,34,31,0.06)"}],
             "threshold": {"line": {"color": color, "width": 2},
                           "thickness": 0.7, "value": value * 100},
         },
@@ -1279,23 +1157,23 @@ def gauge_chart(value, bias_found):
 
 with st.sidebar:
     st.markdown(
-        '<div class="vw-sidebar-header">'
-        '<div class="vw-sidebar-product">⚖️ Verdict Watch</div>'
-        '<div class="vw-sidebar-tagline">Enterprise Bias Detection · V7</div>',
+        '<div class="vw-sidebar-hd">'
+        '<div class="vw-sidebar-name">⚖️ Verdict Watch</div>'
+        '<div class="vw-sidebar-tag">Enterprise Bias Detection · V8</div>',
         unsafe_allow_html=True,
     )
     if _api_key_ok():
-        st.markdown('<div class="vw-key-chip-ok">✓ Groq API Active</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vw-api-ok">✓ Groq API Active</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="vw-key-chip-err">✗ API Key Missing</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vw-api-err">✗ API Key Missing</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     sc1, sc2 = st.columns(2)
     sc1.metric("Session", st.session_state.get("session_count", 0))
     sc2.metric("All Time", len(get_all_reports()))
 
-    st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
-    st.markdown('<div class="vw-section-label">Quick Examples</div>', unsafe_allow_html=True)
+    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+    st.markdown('<div class="sb-label">Quick Examples</div>', unsafe_allow_html=True)
 
     for ex in EXAMPLES:
         if st.button(f"{ex['emoji']} {ex['tag']}", key=f"ex_{ex['tag'].replace(' ','_')}"):
@@ -1303,36 +1181,36 @@ with st.sidebar:
             st.session_state["decision_type_sel"] = ex["type"]
             st.rerun()
 
-    st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
-    st.markdown('<div class="vw-section-label">How It Works</div>', unsafe_allow_html=True)
+    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+    st.markdown('<div class="sb-label">How It Works</div>', unsafe_allow_html=True)
     for n, t in [
-        ("1", "Paste text or upload file"),
+        ("1", "Paste text or upload a file"),
         ("2", "AI extracts decision criteria"),
-        ("3", "Scans 7+ bias dimensions"),
+        ("3", "Scans 7 bias dimensions"),
         ("4", "Generates fair outcome + laws"),
         ("5", "Review highlighted phrases"),
         ("6", "Download report or appeal"),
     ]:
         st.markdown(
             f'<div class="how-step">'
-            f'<div class="how-step-num">{n}</div>'
-            f'<div class="how-step-text">{t}</div>'
+            f'<div class="how-n">{n}</div>'
+            f'<div class="how-t">{t}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
 
 # ─────────────────────────────────────────────
-# HEADER
+# APP BAR
 # ─────────────────────────────────────────────
 
 st.markdown(
     '<div class="vw-appbar">'
-    '<div class="vw-logo-mark">⚖️</div>'
+    '<div class="vw-logo">⚖️</div>'
     '<div>'
     '<div class="vw-appbar-title">Verdict Watch</div>'
     '<div class="vw-appbar-sub">AI-powered bias detection for automated decisions</div>'
     '</div>'
-    '<div class="vw-version-chip">V7 Enterprise</div>'
+    '<div class="vw-badge">V8 Enterprise</div>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -1355,6 +1233,7 @@ with tab_analyse:
     if not _api_key_ok():
         _api_key_banner()
 
+    # ── Input section
     col_form, col_help = st.columns([3, 1], gap="large")
 
     with col_form:
@@ -1362,16 +1241,16 @@ with tab_analyse:
             "Input method", ["✏️ Paste Text", "📄 Upload File"],
             horizontal=True, label_visibility="collapsed",
         )
-        st.markdown('<div class="vw-section-label" style="margin-top:0.75rem;">Decision Text</div>',
+        st.markdown('<div class="vw-label" style="margin-top:14px;">Decision Text</div>',
                     unsafe_allow_html=True)
 
         if input_mode == "✏️ Paste Text":
             decision_text = st.text_area(
                 "text", label_visibility="collapsed",
-                height=200, key="decision_input",
+                height=180, key="decision_input",
                 placeholder=(
-                    "Paste any rejection letter, loan denial, triage result, or "
-                    "university admission decision here…\n\n"
+                    "Paste any rejection letter, loan denial, triage result, "
+                    "or university admission decision here…\n\n"
                     "💡 Click any Quick Example in the sidebar to load it instantly."
                 ),
             )
@@ -1386,13 +1265,14 @@ with tab_analyse:
                 if extracted:
                     decision_text = extracted
                     st.markdown(
-                        f'<div class="badge-ok" style="margin-bottom:0.6rem;">'
+                        f'<div class="badge-ok" style="margin-bottom:10px;">'
                         f'✓ {len(decision_text):,} chars extracted from {uploaded_file.name}</div>',
                         unsafe_allow_html=True,
                     )
                     with st.expander("Preview extracted text"):
                         st.text(decision_text[:800] + ("…" if len(decision_text) > 800 else ""))
 
+        # Type selector + char counter on same row
         tc1, tc2 = st.columns([2, 1])
         with tc1:
             type_opts = ["job", "loan", "medical", "university", "other"]
@@ -1404,34 +1284,34 @@ with tab_analyse:
                 index=cur_idx, key="decision_type_sel",
             )
         with tc2:
-            n       = len((decision_text or "").strip())
-            ok      = n > 50
-            c_col   = "var(--md-tertiary)" if ok else "var(--md-error)"
-            c_suf   = "Ready to analyse" if ok else "Too short"
-            bar_w   = min(100, int(n / 3))
-            bar_col = "#137333" if n > 150 else ("#f29900" if n > 50 else "#d93025")
+            n = len((decision_text or "").strip())
+            ok = n > 50
+            if n > 150:   cc_cls, bar_col, status = "cc-ok",  "#137333", "Ready to analyse"
+            elif n > 50:  cc_cls, bar_col, status = "cc-mid", "#e37400", "Minimum met"
+            else:         cc_cls, bar_col, status = "cc-bad", "#c5221f", "Too short"
+            bar_w = min(100, int(n / 3))
             st.markdown(
-                f'<div style="padding-top:0.85rem;">'
-                f'<div style="font-family:var(--font-body);font-size:0.78rem;'
-                f'font-weight:500;color:{c_col};">{n:,} chars · {c_suf}</div>'
-                f'<div class="quality-track">'
-                f'<div class="quality-fill" style="width:{bar_w}%;background:{bar_col};"></div>'
+                f'<div class="char-counter">'
+                f'<div class="char-count {cc_cls}">{n:,} chars · {status}</div>'
+                f'<div class="char-track">'
+                f'<div class="char-fill" style="width:{bar_w}%;background:{bar_col};"></div>'
                 f'</div></div>',
                 unsafe_allow_html=True,
             )
 
+        st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
         analyse_btn = st.button(
-            "⚡  Run Bias Analysis",
+            "⚡ Run Bias Analysis",
             key="analyse_btn",
             disabled=not _api_key_ok(),
         )
 
     with col_help:
         st.markdown(
-            '<div class="md3-card">'
-            '<div class="md3-card-label">Bias Dimensions</div>'
-            '<div style="font-family:var(--font-body);font-size:0.82rem;'
-            'color:var(--md-on-surface-variant);line-height:2.05;">'
+            '<div class="card">'
+            '<div class="card-label">Bias Dimensions</div>'
+            '<div style="font-family:var(--ff-body);font-size:0.82rem;'
+            'color:var(--t2);line-height:2.1;">'
             '◉ Gender &amp; parental status<br>'
             '◉ Age discrimination<br>'
             '◉ Racial / ethnic bias<br>'
@@ -1443,20 +1323,8 @@ with tab_analyse:
             '</div></div>',
             unsafe_allow_html=True,
         )
-        st.markdown(
-            '<div class="md3-card filled-primary">'
-            '<div class="md3-card-label">V7 Updates</div>'
-            '<div style="font-family:var(--font-body);font-size:0.8rem;'
-            'color:var(--md-on-primary-container);line-height:1.9;">'
-            '✓ Schema migration fix<br>'
-            '✓ Material Design 3<br>'
-            '✓ SVG confidence ring<br>'
-            '✓ Google enterprise theme'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
 
-    # ── RUN ANALYSIS
+    # ── Run analysis
     if analyse_btn:
         dt = (decision_text or "").strip()
         if not dt:
@@ -1468,8 +1336,11 @@ with tab_analyse:
             if cached and not st.session_state.get("force_rerun"):
                 st.markdown(
                     '<div class="dup-warn">'
-                    '⚠️ <strong>Identical text detected</strong> — showing cached result. '
-                    'Use Re-run to force a fresh analysis.</div>',
+                    '<div class="dup-icon">⚠️</div>'
+                    '<div class="dup-text">'
+                    '<strong>Identical text detected — showing cached result.</strong>'
+                    'Use the button below to force a fresh analysis.'
+                    '</div></div>',
                     unsafe_allow_html=True,
                 )
                 if st.button("🔄 Re-run anyway", key="force_rerun_btn"):
@@ -1478,7 +1349,7 @@ with tab_analyse:
                 report, err = cached, None
             else:
                 st.session_state.pop("force_rerun", None)
-                st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
+                st.markdown('<hr class="divider">', unsafe_allow_html=True)
                 with st.spinner(""):
                     report, err = run_analysis(dt, decision_type)
 
@@ -1497,170 +1368,167 @@ with tab_analyse:
                 recs         = report.get("recommendations", [])
                 laws         = report.get("legal_frameworks", [])
                 evidence     = report.get("bias_evidence", "")
+                pct          = int(confidence * 100)
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # Verdict banner
+                # ── Verdict banner
                 if bias_found:
                     st.markdown(
-                        '<div class="verdict-bias">'
-                        '<div class="v-icon">⚠️</div>'
-                        '<div class="v-label">Bias Detected</div>'
-                        '<div class="v-sub">This decision shows discriminatory patterns</div>'
+                        '<div class="v-banner bias">'
+                        '<div class="v-banner-icon">⚠️</div>'
+                        '<div class="v-banner-title">Bias Detected</div>'
+                        '<div class="v-banner-sub">This decision shows discriminatory patterns</div>'
                         '</div>',
                         unsafe_allow_html=True,
                     )
                 else:
                     st.markdown(
-                        '<div class="verdict-clean">'
-                        '<div class="v-icon">✅</div>'
-                        '<div class="v-label">No Bias Found</div>'
-                        '<div class="v-sub">Decision appears free of discriminatory factors</div>'
+                        '<div class="v-banner clean">'
+                        '<div class="v-banner-icon">✅</div>'
+                        '<div class="v-banner-title">No Bias Found</div>'
+                        '<div class="v-banner-sub">Decision appears free of discriminatory factors</div>'
                         '</div>',
                         unsafe_allow_html=True,
                     )
 
-                st.markdown("<br>", unsafe_allow_html=True)
+                # ── Result grid: LEFT (risk + bias info) | RIGHT (outcome cards)
+                left, right = st.columns([3, 2], gap="large")
 
-                # Three-column result
-                r1, r2, r3 = st.columns([1.1, 1.6, 1.5])
+                with left:
+                    # Risk ring + bias type in one row
+                    ring_col, info_col = st.columns([1, 2], gap="medium")
 
-                with r1:
-                    pct = int(confidence * 100)
-                    ring_svg = risk_ring_svg(pct, bias_found)
-                    sev_badge = severity_badge(confidence, bias_found)
-                    desc = ("High confidence — strong discriminatory signal" if pct >= 75
-                            else "Moderate — possible bias patterns" if pct >= 45
-                            else "Low — limited bias indicators")
-                    st.markdown(
-                        f'<div class="md3-card" style="text-align:center;">'
-                        f'<div class="md3-card-label" style="text-align:left;">Risk Assessment</div>'
-                        f'{ring_svg}'
-                        f'<div style="margin-top:4px;">{sev_badge}</div>'
-                        f'<div class="risk-ring-sub">{desc}</div>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                with r2:
-                    bt_html = chips_html(bias_types) if bias_types else '<span class="chip chip-success">None detected</span>'
-                    aff_html = ""
-                    if affected:
-                        aff_html = (
-                            f'<div style="margin-top:0.8rem;">'
-                            f'<div class="md3-card-label">Characteristic Affected</div>'
-                            f'<div style="font-family:var(--font-body);font-size:0.95rem;'
-                            f'font-weight:600;color:#b06000;">{affected}</div>'
-                            f'</div>'
-                        )
-                    st.markdown(
-                        f'<div class="md3-card">'
-                        f'<div class="md3-card-label">Bias Types Detected</div>'
-                        f'<div class="md3-card-value">{bt_html}</div>'
-                        f'{aff_html}'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                    if laws:
+                    with ring_col:
                         st.markdown(
-                            '<div class="md3-card outlined">'
-                            '<div class="md3-card-label">⚖ Relevant Legal Frameworks</div>'
-                            '<div class="timeline">',
+                            f'<div class="card" style="text-align:center;padding:1rem 0.75rem;">'
+                            f'<div class="card-label" style="text-align:center;">Risk Score</div>'
+                            f'<div class="ring-wrap">'
+                            f'{risk_ring_svg(pct, bias_found)}'
+                            f'<div class="ring-sev">{severity_label(confidence, bias_found)}</div>'
+                            f'<div style="font-family:var(--ff-body);font-size:0.73rem;color:var(--t3);'
+                            f'text-align:center;margin-top:2px;">{severity_desc(confidence, bias_found)}</div>'
+                            f'</div></div>',
                             unsafe_allow_html=True,
                         )
-                        for law in laws:
-                            st.markdown(
-                                f'<div class="law-item">'
-                                f'<span class="law-gavel">⚖</span>{law}'
-                                f'</div>',
-                                unsafe_allow_html=True,
-                            )
-                        st.markdown('</div></div>', unsafe_allow_html=True)
 
-                with r3:
-                    orig_c = "filled-error" if bias_found else "tonal"
-                    fair_c = "filled-success"
-                    st.markdown(
-                        f'<div class="md3-card {orig_c}">'
-                        f'<div class="md3-card-label">Original Decision</div>'
-                        f'<div class="md3-card-value mono">{orig.upper()}</div>'
-                        f'</div>'
-                        f'<div class="md3-card {fair_c}">'
-                        f'<div class="md3-card-label">Should Have Been</div>'
-                        f'<div class="md3-card-value">{fair}</div>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-                    if evidence:
+                    with info_col:
+                        bt_html = chips_html(bias_types) if bias_types else '<span class="chip chip-s">None detected</span>'
+                        aff_block = ""
+                        if affected:
+                            aff_block = (
+                                f'<div style="margin-top:12px;">'
+                                f'<div class="card-label">Characteristic Affected</div>'
+                                f'<div style="font-family:var(--ff-body);font-size:1rem;'
+                                f'font-weight:700;color:var(--w);">{affected.title()}</div>'
+                                f'</div>'
+                            )
                         st.markdown(
-                            f'<div class="md3-card filled-warning">'
-                            f'<div class="md3-card-label">Bias Evidence</div>'
-                            f'<div class="md3-card-value" style="font-size:0.86rem;">{evidence}</div>'
+                            f'<div class="card" style="height:100%;">'
+                            f'<div class="card-label">Bias Types Detected</div>'
+                            f'<div style="line-height:1.9;">{bt_html}</div>'
+                            f'{aff_block}'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
 
-                # Phrase highlighter
-                if dt and (bias_types or bias_phrases):
-                    st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
-                    st.markdown('<div class="vw-section-label">🔍 Bias Phrase Highlighter</div>',
-                                unsafe_allow_html=True)
-                    highlighted = highlight_text(dt, bias_phrases, bias_types)
-                    st.markdown(
-                        f'<div class="highlight-box">{highlighted}</div>'
-                        f'<div style="font-family:var(--font-body);font-size:0.72rem;'
-                        f'color:var(--md-on-surface-muted);margin-top:0.4rem;">'
-                        f'Highlighted text = potential proxies for protected characteristics</div>',
-                        unsafe_allow_html=True,
-                    )
+                    # Phrase highlighter
+                    if dt and (bias_types or bias_phrases):
+                        st.markdown('<div class="vw-label" style="margin-top:14px;">Bias Phrase Highlighter</div>',
+                                    unsafe_allow_html=True)
+                        highlighted = highlight_text(dt, bias_phrases, bias_types)
+                        st.markdown(
+                            f'<div class="hl-box">{highlighted}</div>'
+                            f'<div class="hl-caption">Highlighted text = potential proxies for protected characteristics</div>',
+                            unsafe_allow_html=True,
+                        )
 
-                # Explanation
-                if explanation:
-                    st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
-                    st.markdown('<div class="vw-section-label">What Happened — Plain English</div>',
-                                unsafe_allow_html=True)
+                    # Explanation
+                    if explanation:
+                        st.markdown('<div class="vw-label" style="margin-top:14px;">What Happened — Plain English</div>',
+                                    unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="card w-fill">'
+                            f'<div class="card-value">{explanation}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                with right:
+                    # Outcome cards
+                    orig_cls = "e-fill" if bias_found else "muted"
                     st.markdown(
-                        f'<div class="md3-card filled-warning">'
-                        f'<div class="md3-card-value">{explanation}</div>'
+                        f'<div class="card {orig_cls}">'
+                        f'<div class="card-label">Original Decision</div>'
+                        f'<div class="card-value mono" style="font-size:1.05rem;font-weight:700;">'
+                        f'{orig.upper()}</div>'
+                        f'</div>'
+                        f'<div class="card s-fill">'
+                        f'<div class="card-label">Should Have Been</div>'
+                        f'<div class="card-value" style="font-weight:600;">{fair}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
 
-                # Recommendations
+                    if evidence:
+                        st.markdown(
+                            f'<div class="card w-fill">'
+                            f'<div class="card-label">Bias Evidence</div>'
+                            f'<div class="card-value" style="font-size:0.86rem;">{evidence}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                    # Legal frameworks in right column
+                    if laws:
+                        st.markdown(
+                            '<div class="card">'
+                            '<div class="card-label">Relevant Legal Frameworks</div>',
+                            unsafe_allow_html=True,
+                        )
+                        for law in laws:
+                            st.markdown(
+                                f'<div class="law">'
+                                f'<span class="law-icon">⚖️</span>{law}'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+                # ── Recommendations (full width)
                 if recs:
-                    st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
-                    st.markdown('<div class="vw-section-label">Recommended Next Steps</div>',
+                    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+                    st.markdown('<div class="vw-label">Recommended Next Steps</div>',
                                 unsafe_allow_html=True)
                     for i, rec in enumerate(recs, 1):
                         st.markdown(
-                            f'<div class="rec-item">'
+                            f'<div class="rec">'
                             f'<div class="rec-num">{i}</div>'
                             f'<div class="rec-text">{rec}</div>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
 
-                # Feedback
-                st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
-                st.markdown('<div class="vw-section-label">Was This Analysis Helpful?</div>',
+                # ── Feedback
+                st.markdown('<hr class="divider">', unsafe_allow_html=True)
+                st.markdown('<div class="vw-label">Was This Analysis Helpful?</div>',
                             unsafe_allow_html=True)
-                fb1, fb2, _ = st.columns([1, 1, 3])
+                fb1, fb2, _ = st.columns([1, 1, 4])
                 with fb1:
-                    if st.button("👍  Helpful", key="fb_yes"):
+                    if st.button("👍 Helpful", key="fb_yes"):
                         services.save_feedback(report.get("id"), 1)
-                        st.success("Thank you for your feedback!")
+                        st.success("Thank you!")
                 with fb2:
-                    if st.button("👎  Not helpful", key="fb_no"):
+                    if st.button("👎 Not helpful", key="fb_no"):
                         services.save_feedback(report.get("id"), 0)
-                        st.info("Feedback noted.")
+                        st.info("Noted.")
 
-                # Appeal letter
+                # ── Appeal letter
                 if bias_found:
-                    st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
-                    st.markdown('<div class="vw-section-label">✉️ Formal Appeal Letter</div>',
+                    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+                    st.markdown('<div class="vw-label">Formal Appeal Letter</div>',
                                 unsafe_allow_html=True)
-                    if st.button("✉️  Generate Appeal Letter", key="appeal_btn"):
+                    if st.button("✉️ Generate Appeal Letter", key="appeal_btn"):
                         with st.spinner("Drafting formal appeal…"):
                             try:
                                 letter = services.generate_appeal_letter(report, dt, decision_type)
@@ -1670,7 +1538,7 @@ with tab_analyse:
                     if st.session_state.get("appeal_letter"):
                         letter = st.session_state["appeal_letter"]
                         st.markdown(f'<div class="appeal-box">{letter}</div>', unsafe_allow_html=True)
-                        dl1, _ = st.columns([1, 2])
+                        dl1, _ = st.columns([1, 3])
                         with dl1:
                             st.download_button(
                                 "📥 Download Appeal Letter",
@@ -1679,14 +1547,14 @@ with tab_analyse:
                                 mime="text/plain", key="dl_appeal",
                             )
 
-                # Download report
+                # ── Download report
                 st.markdown("<br>", unsafe_allow_html=True)
-                dl1, _ = st.columns([1, 2])
+                dl1, _ = st.columns([1, 3])
                 with dl1:
                     st.download_button(
                         "📥 Download Full Report (.txt)",
                         data=build_txt_report(report, dt, decision_type),
-                        file_name=f"verdict_v7_{report.get('id','report')[:8]}.txt",
+                        file_name=f"verdict_v8_{report.get('id','report')[:8]}.txt",
                         mime="text/plain", key="dl_report",
                     )
 
@@ -1701,8 +1569,8 @@ with tab_dashboard:
     hist = get_all_reports()
     if not hist:
         st.markdown(
-            '<div class="empty-state">'
-            '<div class="empty-illustration">📊</div>'
+            '<div class="empty">'
+            '<div class="empty-ico">📊</div>'
             '<div class="empty-title">No analytics data yet</div>'
             '<div class="empty-sub">Run your first analysis in the Analyse tab to populate the dashboard.</div>'
             '</div>',
@@ -1718,26 +1586,22 @@ with tab_dashboard:
         top_bias   = Counter(all_types).most_common(1)[0][0] if all_types else "N/A"
         fb_stats   = services.get_feedback_stats()
 
-        # KPI row
         k1, k2, k3, k4, k5 = st.columns(5)
         k1.metric("Total Analyses", len(hist))
         k2.metric("Bias Rate", f"{bias_rate:.0f}%")
         k3.metric("Avg Confidence", f"{avg_conf:.0f}%")
         k4.metric("Top Bias Type", top_bias)
-        k5.metric("Helpful Rating",
-                  f"{fb_stats['helpful_pct']}%" if fb_stats["total"] else "—")
+        k5.metric("Helpful Rating", f"{fb_stats['helpful_pct']}%" if fb_stats["total"] else "—")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         c1, c2 = st.columns(2, gap="large")
         with c1:
-            st.markdown('<div class="vw-section-label">Verdict Distribution</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="vw-label">Verdict Distribution</div>', unsafe_allow_html=True)
             st.plotly_chart(pie_chart(len(bias_reps), len(clean_reps)),
                             use_container_width=True, config={"displayModeBar": False})
         with c2:
-            st.markdown('<div class="vw-section-label">Bias Type Frequency</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="vw-label">Bias Type Frequency</div>', unsafe_allow_html=True)
             if all_types:
                 st.plotly_chart(bar_chart(all_types), use_container_width=True,
                                 config={"displayModeBar": False})
@@ -1746,33 +1610,28 @@ with tab_dashboard:
 
         td = services.get_trend_data()
         if td:
-            st.markdown('<div class="vw-section-label">Daily Bias Rate Trend</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="vw-label">Daily Bias Rate Trend</div>', unsafe_allow_html=True)
             tf = trend_chart(td)
             if tf:
                 st.plotly_chart(tf, use_container_width=True, config={"displayModeBar": False})
 
         c3, c4 = st.columns(2, gap="large")
         with c3:
-            st.markdown('<div class="vw-section-label">Confidence Score Distribution</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="vw-label">Confidence Score Distribution</div>', unsafe_allow_html=True)
             st.plotly_chart(histogram_chart(scores), use_container_width=True,
                             config={"displayModeBar": False})
         with c4:
-            st.markdown('<div class="vw-section-label">Bias Dimension Radar</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="vw-label">Bias Dimension Radar</div>', unsafe_allow_html=True)
             st.plotly_chart(radar_chart(hist), use_container_width=True,
                             config={"displayModeBar": False})
 
         c5, c6 = st.columns(2, gap="large")
         with c5:
-            st.markdown('<div class="vw-section-label">Severity Breakdown</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="vw-label">Severity Breakdown</div>', unsafe_allow_html=True)
             st.plotly_chart(severity_donut(hist), use_container_width=True,
                             config={"displayModeBar": False})
         with c6:
-            st.markdown('<div class="vw-section-label">Top Affected Characteristics</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="vw-label">Top Affected Characteristics</div>', unsafe_allow_html=True)
             chars = [r.get("affected_characteristic") for r in hist if r.get("affected_characteristic")]
             if chars:
                 st.plotly_chart(bar_chart(chars), use_container_width=True,
@@ -1781,8 +1640,8 @@ with tab_dashboard:
                 st.info("No data yet.")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        exp1, _ = st.columns([1, 3])
-        with exp1:
+        dl1, _ = st.columns([1, 4])
+        with dl1:
             st.download_button(
                 "📥 Export Dashboard (.csv)",
                 data=reports_to_csv(hist),
@@ -1798,8 +1657,8 @@ with tab_history:
     hist = get_all_reports()
     if not hist:
         st.markdown(
-            '<div class="empty-state">'
-            '<div class="empty-illustration">📋</div>'
+            '<div class="empty">'
+            '<div class="empty-ico">📋</div>'
             '<div class="empty-title">No history yet</div>'
             '<div class="empty-sub">All past analyses appear here with filtering and export options.</div>'
             '</div>',
@@ -1813,18 +1672,16 @@ with tab_history:
                 key="history_search",
             )
         with f2:
-            filt_v = st.selectbox("Verdict", ["All", "Bias Detected", "No Bias"],
-                                   key="hf_verdict")
+            filt_v = st.selectbox("Verdict", ["All", "Bias Detected", "No Bias"], key="hf_verdict")
         with f3:
             sort_by = st.selectbox(
-                "Sort",
-                ["Newest First", "Oldest First", "Highest Confidence", "Lowest Confidence"],
+                "Sort", ["Newest First", "Oldest First", "Highest Confidence", "Lowest Confidence"],
                 key="hf_sort",
             )
 
         dr1, dr2, _ = st.columns([1, 1, 2])
-        with dr1: d_from = st.date_input("From", value=None, key="hf_from", label_visibility="visible")
-        with dr2: d_to   = st.date_input("To",   value=None, key="hf_to",   label_visibility="visible")
+        with dr1: d_from = st.date_input("From", value=None, key="hf_from")
+        with dr2: d_to   = st.date_input("To",   value=None, key="hf_to")
 
         filtered = hist[:]
         if filt_v == "Bias Detected": filtered = [r for r in filtered if r.get("bias_found")]
@@ -1846,9 +1703,8 @@ with tab_history:
         h1, h2 = st.columns([3, 1])
         with h1:
             st.markdown(
-                f'<div style="font-family:var(--font-body);font-size:0.8rem;'
-                f'color:var(--md-on-surface-variant);margin-bottom:0.9rem;">'
-                f'Showing {len(filtered)} of {len(hist)} reports</div>',
+                f'<div style="font-family:var(--ff-body);font-size:0.8rem;color:var(--t3);'
+                f'margin-bottom:14px;">Showing {len(filtered)} of {len(hist)} reports</div>',
                 unsafe_allow_html=True,
             )
         with h2:
@@ -1875,17 +1731,17 @@ with tab_history:
             ):
                 ec1, ec2 = st.columns(2, gap="large")
                 with ec1:
-                    vcls    = "filled-error" if bias else "filled-success"
-                    v_text  = "⚠ Bias Detected" if bias else "✓ No Bias Found"
-                    orig_o  = (r.get("original_outcome") or "N/A").upper()
+                    vcls   = "e-fill" if bias else "s-fill"
+                    v_text = "⚠ Bias Detected" if bias else "✓ No Bias Found"
+                    orig_o = (r.get("original_outcome") or "N/A").upper()
                     st.markdown(
-                        f'<div class="md3-card {vcls}">'
-                        f'<div class="md3-card-label">Verdict</div>'
-                        f'<div class="md3-card-value mono">{v_text}</div>'
+                        f'<div class="card {vcls}">'
+                        f'<div class="card-label">Verdict</div>'
+                        f'<div class="card-value mono">{v_text}</div>'
                         f'</div>'
-                        f'<div class="md3-card outlined" style="margin-top:0.5rem;">'
-                        f'<div class="md3-card-label">Original Outcome</div>'
-                        f'<div class="md3-card-value mono">{orig_o}</div>'
+                        f'<div class="card" style="margin-top:8px;">'
+                        f'<div class="card-label">Original Outcome</div>'
+                        f'<div class="card-value mono">{orig_o}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1893,41 +1749,41 @@ with tab_history:
                     b_chips  = chips_html(b_types) if b_types else "None"
                     fair_out = r.get("fair_outcome") or "N/A"
                     st.markdown(
-                        f'<div class="md3-card filled-warning">'
-                        f'<div class="md3-card-label">Bias Types</div>'
-                        f'<div class="md3-card-value">{b_chips}</div>'
+                        f'<div class="card w-fill">'
+                        f'<div class="card-label">Bias Types</div>'
+                        f'<div class="card-value">{b_chips}</div>'
                         f'</div>'
-                        f'<div class="md3-card filled-success" style="margin-top:0.5rem;">'
-                        f'<div class="md3-card-label">Fair Outcome</div>'
-                        f'<div class="md3-card-value">{fair_out}</div>'
+                        f'<div class="card s-fill" style="margin-top:8px;">'
+                        f'<div class="card-label">Fair Outcome</div>'
+                        f'<div class="card-value">{fair_out}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
 
                 if r.get("explanation"):
                     st.markdown(
-                        f'<div class="md3-card tonal" style="margin-top:0.5rem;">'
-                        f'<div class="md3-card-label">Explanation</div>'
-                        f'<div class="md3-card-value" style="font-size:0.87rem;">{r["explanation"]}</div>'
+                        f'<div class="card muted" style="margin-top:8px;">'
+                        f'<div class="card-label">Explanation</div>'
+                        f'<div class="card-value" style="font-size:0.87rem;">{r["explanation"]}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
                 if laws:
-                    lw = chips_html(laws, "chip-primary")
+                    lw = chips_html(laws, "chip-p")
                     st.markdown(
-                        f'<div class="md3-card filled-primary" style="margin-top:0.5rem;">'
-                        f'<div class="md3-card-label">Legal Frameworks</div>'
-                        f'<div class="md3-card-value">{lw}</div>'
+                        f'<div class="card p-fill" style="margin-top:8px;">'
+                        f'<div class="card-label">Legal Frameworks</div>'
+                        f'<div class="card-value">{lw}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
                 recs = r.get("recommendations", [])
                 if recs:
-                    st.markdown('<div class="vw-section-label" style="margin-top:0.8rem;">Next Steps</div>',
+                    st.markdown('<div class="vw-label" style="margin-top:12px;">Next Steps</div>',
                                 unsafe_allow_html=True)
                     for i, rec in enumerate(recs, 1):
                         st.markdown(
-                            f'<div class="rec-item"><div class="rec-num">{i}</div>'
+                            f'<div class="rec"><div class="rec-num">{i}</div>'
                             f'<div class="rec-text">{rec}</div></div>',
                             unsafe_allow_html=True,
                         )
@@ -1942,29 +1798,30 @@ with tab_compare:
         _api_key_banner()
 
     st.markdown(
-        '<div style="font-family:var(--font-body);font-size:0.9rem;'
-        'color:var(--md-on-surface-variant);margin-bottom:1.2rem;">'
+        '<div style="font-family:var(--ff-body);font-size:0.9rem;color:var(--t2);margin-bottom:1.2rem;">'
         'Analyse two decisions side-by-side — verdict, confidence, bias types, and applicable laws.</div>',
         unsafe_allow_html=True,
     )
 
     cc1, cc2 = st.columns(2, gap="large")
     with cc1:
-        st.markdown('<div style="font-family:var(--font-display);font-size:1rem;font-weight:600;color:var(--md-on-surface);margin-bottom:0.5rem;">Decision A</div>', unsafe_allow_html=True)
-        cmp_text1 = st.text_area("Text A", height=140, label_visibility="collapsed",
+        st.markdown('<div style="font-family:var(--ff-body);font-size:1rem;font-weight:700;'
+                    'color:var(--t1);margin-bottom:8px;">Decision A</div>', unsafe_allow_html=True)
+        cmp_text1 = st.text_area("Text A", height=130, label_visibility="collapsed",
                                   placeholder="Paste first decision…", key="cmp1")
         cmp_type1 = st.selectbox("Type A", ["job","loan","medical","university","other"],
                                   format_func=lambda x: TYPE_LABELS[x],
                                   label_visibility="collapsed", key="cmp_type1")
     with cc2:
-        st.markdown('<div style="font-family:var(--font-display);font-size:1rem;font-weight:600;color:var(--md-on-surface);margin-bottom:0.5rem;">Decision B</div>', unsafe_allow_html=True)
-        cmp_text2 = st.text_area("Text B", height=140, label_visibility="collapsed",
+        st.markdown('<div style="font-family:var(--ff-body);font-size:1rem;font-weight:700;'
+                    'color:var(--t1);margin-bottom:8px;">Decision B</div>', unsafe_allow_html=True)
+        cmp_text2 = st.text_area("Text B", height=130, label_visibility="collapsed",
                                   placeholder="Paste second decision…", key="cmp2")
         cmp_type2 = st.selectbox("Type B", ["job","loan","medical","university","other"],
                                   format_func=lambda x: TYPE_LABELS[x],
                                   label_visibility="collapsed", key="cmp_type2")
 
-    cmp_btn = st.button("⚡  Compare Both Decisions", key="compare_btn", disabled=not _api_key_ok())
+    cmp_btn = st.button("⚡ Compare Both Decisions", key="compare_btn", disabled=not _api_key_ok())
 
     if cmp_btn:
         if not cmp_text1.strip() or not cmp_text2.strip():
@@ -1976,7 +1833,7 @@ with tab_compare:
             if e1: st.error(f"Decision A: {e1}")
             if e2: st.error(f"Decision B: {e2}")
             if r1 and r2:
-                st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
+                st.markdown('<hr class="divider">', unsafe_allow_html=True)
                 b1, b2   = r1.get("bias_found"), r2.get("bias_found")
                 c1v, c2v = r1.get("confidence_score", 0), r2.get("confidence_score", 0)
                 if b1 and b2:
@@ -1985,44 +1842,43 @@ with tab_compare:
                 elif b1:  banner = "⚠️ Decision A shows bias · Decision B appears fair"
                 elif b2:  banner = "⚠️ Decision B shows bias · Decision A appears fair"
                 else:     banner = "✅ Neither decision shows clear discriminatory patterns"
-                st.markdown(f'<div class="winner-banner">{banner}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="winner">{banner}</div>', unsafe_allow_html=True)
 
                 v1c, v2c = st.columns(2, gap="large")
                 for col, r, lbl in [(v1c, r1, "A"), (v2c, r2, "B")]:
                     with col:
                         bias  = r.get("bias_found", False)
                         conf  = r.get("confidence_score", 0)
-                        vcls  = "verdict-bias" if bias else "verdict-clean"
+                        vcls  = "bias" if bias else "clean"
                         vico  = "⚠️" if bias else "✅"
                         vsub  = "Bias Detected" if bias else "No Bias Found"
                         st.markdown(
-                            f'<div class="{vcls}"><div class="v-icon">{vico}</div>'
-                            f'<div class="v-label">Decision {lbl}</div>'
-                            f'<div class="v-sub">{vsub}</div></div>',
+                            f'<div class="v-banner {vcls}" style="margin-bottom:12px;">'
+                            f'<div class="v-banner-icon">{vico}</div>'
+                            f'<div class="v-banner-title">Decision {lbl}</div>'
+                            f'<div class="v-banner-sub">{vsub}</div></div>',
                             unsafe_allow_html=True,
                         )
                         st.plotly_chart(gauge_chart(conf, bias), use_container_width=True,
                                         config={"displayModeBar": False})
                         bt_ch  = chips_html(r.get("bias_types", []))
-                        sv_bdg = severity_badge(conf, bias)
-                        st.markdown(f'{bt_ch} {sv_bdg}', unsafe_allow_html=True)
+                        sv_bdg = severity_label(conf, bias)
+                        st.markdown(f'{bt_ch}<br>{sv_bdg}', unsafe_allow_html=True)
                         r_laws = r.get("legal_frameworks", [])
                         if r_laws:
-                            st.markdown(chips_html(r_laws, "chip-primary"), unsafe_allow_html=True)
-                        fair_v = r.get("fair_outcome") or "N/A"
-                        expl_v = r.get("explanation") or ""
+                            st.markdown(chips_html(r_laws, "chip-p"), unsafe_allow_html=True)
                         st.markdown(
-                            f'<div class="md3-card filled-success" style="margin-top:0.7rem;">'
-                            f'<div class="md3-card-label">Fair Outcome</div>'
-                            f'<div class="md3-card-value">{fair_v}</div>'
+                            f'<div class="card s-fill" style="margin-top:10px;">'
+                            f'<div class="card-label">Fair Outcome</div>'
+                            f'<div class="card-value">{r.get("fair_outcome") or "N/A"}</div>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
-                        if expl_v:
+                        if r.get("explanation"):
                             st.markdown(
-                                f'<div class="md3-card filled-warning">'
-                                f'<div class="md3-card-label">What Went Wrong</div>'
-                                f'<div class="md3-card-value" style="font-size:0.86rem;">{expl_v}</div>'
+                                f'<div class="card w-fill">'
+                                f'<div class="card-label">What Went Wrong</div>'
+                                f'<div class="card-value" style="font-size:0.86rem;">{r["explanation"]}</div>'
                                 f'</div>',
                                 unsafe_allow_html=True,
                             )
@@ -2036,13 +1892,11 @@ with tab_batch:
         _api_key_banner()
 
     st.markdown(
-        '<div style="font-family:var(--font-body);font-size:0.9rem;'
-        'color:var(--md-on-surface-variant);margin-bottom:1.2rem;">'
-        'Paste decisions separated by <code style="background:var(--md-surface-variant);'
-        'padding:2px 7px;border-radius:4px;font-family:var(--font-mono);">---</code> '
-        'or upload a CSV with a <code style="background:var(--md-surface-variant);'
-        'padding:2px 7px;border-radius:4px;font-family:var(--font-mono);">text</code> '
-        'column. Limit: 10 per run.</div>',
+        '<div style="font-family:var(--ff-body);font-size:0.9rem;color:var(--t2);margin-bottom:1.2rem;">'
+        'Paste decisions separated by <code style="background:var(--surf-2);padding:2px 7px;'
+        'border-radius:4px;font-family:var(--ff-mono);">---</code> '
+        'or upload a CSV with a <code style="background:var(--surf-2);padding:2px 7px;'
+        'border-radius:4px;font-family:var(--ff-mono);">text</code> column. Limit: 10 per run.</div>',
         unsafe_allow_html=True,
     )
 
@@ -2066,10 +1920,8 @@ with tab_batch:
                 df_up = pd.read_csv(batch_csv)
                 if "text" in df_up.columns:
                     raw_blocks = df_up["text"].dropna().tolist()
-                    st.markdown(
-                        f'<div class="badge-ok">✓ {len(raw_blocks)} rows loaded from CSV</div>',
-                        unsafe_allow_html=True,
-                    )
+                    st.markdown(f'<div class="badge-ok">✓ {len(raw_blocks)} rows loaded from CSV</div>',
+                                unsafe_allow_html=True)
                 else:
                     st.error("❌ CSV must contain a column named 'text'")
             except Exception as e:
@@ -2083,12 +1935,12 @@ with tab_batch:
             label_visibility="collapsed", key="batch_type",
         )
     with bc2:
-        batch_btn = st.button("📦  Run Batch Analysis", key="batch_run", disabled=not _api_key_ok())
+        batch_btn = st.button("📦 Run Batch Analysis", key="batch_run", disabled=not _api_key_ok())
 
     if raw_blocks:
         st.markdown(
-            f'<div style="font-family:var(--font-body);font-size:0.82rem;'
-            f'color:var(--md-primary);font-weight:500;margin-top:0.3rem;">'
+            f'<div style="font-family:var(--ff-body);font-size:0.82rem;color:var(--p);'
+            f'font-weight:500;margin-top:4px;">'
             f'● {len(raw_blocks)} decision{"s" if len(raw_blocks) != 1 else ""} queued</div>',
             unsafe_allow_html=True,
         )
@@ -2108,8 +1960,8 @@ with tab_batch:
                 eta     = (elapsed / (i + 1)) * (len(raw_blocks) - i - 1) if i > 0 else 0
                 eta_str = f"  ·  ETA ~{int(eta)}s" if eta > 1 else ""
                 status.markdown(
-                    f'<div style="font-family:var(--font-body);font-size:0.82rem;'
-                    f'color:var(--md-primary);font-weight:500;">'
+                    f'<div style="font-family:var(--ff-body);font-size:0.82rem;'
+                    f'color:var(--p);font-weight:500;">'
                     f'Analysing {i+1} of {len(raw_blocks)}{eta_str}…</div>',
                     unsafe_allow_html=True,
                 )
@@ -2118,7 +1970,7 @@ with tab_batch:
                 progress.progress((i + 1) / len(raw_blocks))
             progress.empty(); status.empty()
 
-            st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
+            st.markdown('<hr class="divider">', unsafe_allow_html=True)
             bias_c  = sum(1 for r in results if r["report"] and r["report"].get("bias_found"))
             clean_c = sum(1 for r in results if r["report"] and not r["report"].get("bias_found"))
             err_c   = sum(1 for r in results if r["error"])
@@ -2149,7 +2001,7 @@ with tab_batch:
 
             all_reps = [r["report"] for r in results if r["report"]]
             if all_reps:
-                dl1, _ = st.columns([1, 2])
+                dl1, _ = st.columns([1, 3])
                 with dl1:
                     st.download_button(
                         "📥 Download Batch Results (.csv)",
@@ -2159,7 +2011,7 @@ with tab_batch:
                     )
 
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown('<div class="vw-section-label">Detailed Results</div>', unsafe_allow_html=True)
+            st.markdown('<div class="vw-label">Detailed Results</div>', unsafe_allow_html=True)
             for i, res in enumerate(results, 1):
                 rep, error = res["report"], res["error"]
                 lbl = f"Decision {i}"
@@ -2175,31 +2027,33 @@ with tab_batch:
                         st.error(error)
                     elif rep:
                         bias   = rep.get("bias_found", False)
-                        btyps  = rep.get("bias_types", [])
-                        laws   = rep.get("legal_frameworks", [])
-                        vcls   = "filled-error" if bias else "filled-success"
+                        vcls   = "e-fill" if bias else "s-fill"
                         b_v    = "⚠ Bias Detected" if bias else "✓ No Bias Found"
-                        bt_ch  = chips_html(btyps) if btyps else "None"
-                        fair   = rep.get("fair_outcome") or "N/A"
-                        lw_blk = ""
-                        if laws:
-                            lw_blk = (f'<div class="md3-card filled-primary" style="margin-top:0.5rem;">'
-                                      f'<div class="md3-card-label">Legal Frameworks</div>'
-                                      f'<div class="md3-card-value">{chips_html(laws,"chip-primary")}</div>'
-                                      f'</div>')
+                        bt_ch  = chips_html(rep.get("bias_types", []))
+                        laws   = rep.get("legal_frameworks", [])
                         st.markdown(
-                            f'<div class="md3-card {vcls}" style="margin-top:0.5rem;">'
-                            f'<div class="md3-card-label">Verdict</div>'
-                            f'<div class="md3-card-value mono">{b_v}</div>'
+                            f'<div class="card {vcls}">'
+                            f'<div class="card-label">Verdict</div>'
+                            f'<div class="card-value mono">{b_v}</div>'
                             f'</div>'
-                            f'<div class="md3-card filled-warning" style="margin-top:0.5rem;">'
-                            f'<div class="md3-card-label">Bias Types</div>'
-                            f'<div class="md3-card-value">{bt_ch}</div>'
-                            f'</div>'
-                            f'{lw_blk}'
-                            f'<div class="md3-card filled-success" style="margin-top:0.5rem;">'
-                            f'<div class="md3-card-label">Fair Outcome</div>'
-                            f'<div class="md3-card-value">{fair}</div>'
+                            f'<div class="card w-fill" style="margin-top:8px;">'
+                            f'<div class="card-label">Bias Types</div>'
+                            f'<div class="card-value">{bt_ch}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                        if laws:
+                            st.markdown(
+                                f'<div class="card p-fill" style="margin-top:8px;">'
+                                f'<div class="card-label">Legal Frameworks</div>'
+                                f'<div class="card-value">{chips_html(laws,"chip-p")}</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        st.markdown(
+                            f'<div class="card s-fill" style="margin-top:8px;">'
+                            f'<div class="card-label">Fair Outcome</div>'
+                            f'<div class="card-value">{rep.get("fair_outcome") or "N/A"}</div>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
@@ -2210,61 +2064,58 @@ with tab_batch:
 
 with tab_settings:
     st.markdown(
-        '<div style="font-family:var(--font-display);font-size:1.3rem;font-weight:700;'
-        'color:var(--md-on-surface);margin-bottom:0.25rem;">Settings &amp; System Status</div>'
-        '<div style="font-family:var(--font-body);font-size:0.875rem;'
-        'color:var(--md-on-surface-variant);margin-bottom:1.5rem;">'
-        'Verdict Watch V7 Enterprise — configuration and diagnostics.</div>',
+        '<div style="font-family:var(--ff-body);font-size:1.25rem;font-weight:700;'
+        'color:var(--t1);margin-bottom:4px;letter-spacing:-.02em;">Settings &amp; System Status</div>'
+        '<div style="font-family:var(--ff-body);font-size:0.875rem;color:var(--t2);'
+        'margin-bottom:1.5rem;">Verdict Watch V8 Enterprise — configuration and diagnostics.</div>',
         unsafe_allow_html=True,
     )
 
     s1, s2 = st.columns(2, gap="large")
     with s1:
-        st.markdown('<div class="vw-section-label">API &amp; Model Configuration</div>',
-                    unsafe_allow_html=True)
+        st.markdown('<div class="vw-label">API &amp; Model Configuration</div>', unsafe_allow_html=True)
         key_set  = _api_key_ok()
-        k_vcls   = "filled-success" if key_set else "filled-error"
+        k_vcls   = "s-fill" if key_set else "e-fill"
         k_stat   = "✓ Set (from .env)" if key_set else "✗ Not Set"
-        pdf_vcls = "filled-success" if PDF_SUPPORT else "filled-warning"
+        pdf_vcls = "s-fill" if PDF_SUPPORT else "w-fill"
         pdf_stat = "✓ Installed" if PDF_SUPPORT else "Not installed — pip install PyMuPDF"
         st.markdown(
-            f'<div class="md3-card {k_vcls}"><div class="md3-card-label">Groq API Key</div>'
-            f'<div class="md3-card-value mono">{k_stat}</div></div>'
-            f'<div class="md3-card outlined"><div class="md3-card-label">Model</div>'
-            f'<div class="md3-card-value mono">llama-3.3-70b-versatile</div></div>'
-            f'<div class="md3-card outlined"><div class="md3-card-label">Temperature · Retries</div>'
-            f'<div class="md3-card-value mono">0.1  ·  3× exponential backoff</div></div>'
-            f'<div class="md3-card {pdf_vcls}"><div class="md3-card-label">PyMuPDF (PDF support)</div>'
-            f'<div class="md3-card-value mono">{pdf_stat}</div></div>',
+            f'<div class="card {k_vcls}"><div class="card-label">Groq API Key</div>'
+            f'<div class="card-value mono">{k_stat}</div></div>'
+            f'<div class="card"><div class="card-label">Model</div>'
+            f'<div class="card-value mono">llama-3.3-70b-versatile</div></div>'
+            f'<div class="card"><div class="card-label">Temperature · Retries</div>'
+            f'<div class="card-value mono">0.1  ·  3× exponential backoff</div></div>'
+            f'<div class="card {pdf_vcls}"><div class="card-label">PyMuPDF (PDF support)</div>'
+            f'<div class="card-value mono">{pdf_stat}</div></div>',
             unsafe_allow_html=True,
         )
 
     with s2:
-        st.markdown('<div class="vw-section-label">Database &amp; Feedback Stats</div>',
-                    unsafe_allow_html=True)
+        st.markdown('<div class="vw-label">Database &amp; Feedback Stats</div>', unsafe_allow_html=True)
         all_r  = get_all_reports()
         fb     = services.get_feedback_stats()
         db_url = os.getenv("DATABASE_URL", "sqlite:///verdict_watch.db")
         st.markdown(
-            f'<div class="md3-card"><div class="md3-card-label">Total Reports</div>'
-            f'<div class="md3-card-value large">{len(all_r)}</div></div>'
-            f'<div class="md3-card outlined"><div class="md3-card-label">Database URL</div>'
-            f'<div class="md3-card-value mono" style="font-size:0.78rem;">{db_url}</div></div>'
-            f'<div class="md3-card filled-primary"><div class="md3-card-label">User Feedback</div>'
-            f'<div class="md3-card-value mono">{fb["total"]} ratings · {fb["helpful_pct"]}% helpful</div></div>',
+            f'<div class="card no-border"><div class="card-label">Total Reports</div>'
+            f'<div class="card-value large">{len(all_r)}</div></div>'
+            f'<div class="card"><div class="card-label">Database URL</div>'
+            f'<div class="card-value mono" style="font-size:0.78rem;">{db_url}</div></div>'
+            f'<div class="card p-fill"><div class="card-label">User Feedback</div>'
+            f'<div class="card-value mono">{fb["total"]} ratings · {fb["helpful_pct"]}% helpful</div></div>',
             unsafe_allow_html=True,
         )
 
-    st.markdown('<hr class="md3-divider">', unsafe_allow_html=True)
-    st.markdown('<div class="vw-section-label">V7 Feature Registry</div>', unsafe_allow_html=True)
+    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+    st.markdown('<div class="vw-label">V8 Feature Registry</div>', unsafe_allow_html=True)
 
     features = [
         ("Schema Migration Fix",    "text_hash OperationalError resolved",    True),
         ("Material Design 3",       "Google enterprise token system",          True),
-        ("SVG Confidence Ring",     "Animated arc ring with MD3 colors",       True),
-        ("Google Top App Bar",      "Sticky header with branding",             True),
-        ("MD3 Card Elevation",      "Surface + shadow system",                 True),
-        ("Quick Examples Fix",      "Session state key binding (V6)",          True),
+        ("SVG Confidence Ring",     "Animated arc ring, properly centred",     True),
+        ("V8 Layout Overhaul",      "2+1 result grid, consistent card heights",True),
+        ("DM Sans Typography",      "Clean, modern type system",               True),
+        ("Quick Examples",          "Session state key binding",               True),
         ("Duplicate Detection",     "SHA-256 hash caching",                    True),
         ("Retry Logic",             "3× exponential backoff",                  True),
         ("Bias Phrase Extraction",  "Model-flagged exact phrases",             True),
@@ -2277,16 +2128,16 @@ with tab_settings:
         ("Appeal Letter Generator", "Formal discrimination appeal",            True),
         ("Export (TXT + CSV)",      "Full report + batch export",              True),
     ]
-    feat_html = '<div class="md3-card outlined" style="padding:0.5rem 1.5rem;">'
+    feat_html = '<div class="card" style="padding:0.5rem 1.3rem;">'
     for name, desc, enabled in features:
-        icon = "✓" if enabled else "○"
-        color = "var(--md-tertiary)" if enabled else "var(--md-on-surface-muted)"
+        icon  = "✓" if enabled else "○"
+        color = "var(--s)" if enabled else "var(--t3)"
         feat_html += (
-            f'<div class="feature-row">'
-            f'<span class="feature-name">'
-            f'<span class="feature-check" style="color:{color};margin-right:8px;">{icon}</span>'
+            f'<div class="feat-row">'
+            f'<span class="feat-name">'
+            f'<span class="feat-check" style="color:{color};margin-right:8px;">{icon}</span>'
             f'{name}</span>'
-            f'<span class="feature-desc">{desc}</span>'
+            f'<span class="feat-desc">{desc}</span>'
             f'</div>'
         )
     feat_html += '</div>'
@@ -2300,7 +2151,7 @@ with tab_about:
     st.markdown(
         '<div class="about-hero">'
         '<h2>What is Verdict Watch?</h2>'
-        '<p>Verdict Watch V7 is an enterprise-grade AI system that analyses automated decisions — '
+        '<p>Verdict Watch V8 is an enterprise-grade AI system that analyses automated decisions — '
         'job rejections, loan denials, medical triage, university admissions — for hidden bias. '
         'A 3-step Groq + Llama 3.3 70B pipeline extracts criteria, detects discriminatory patterns, '
         'cites relevant laws, and generates the fair outcome you deserved.</p>'
@@ -2310,7 +2161,7 @@ with tab_about:
 
     ab1, ab2 = st.columns([1.6, 1], gap="large")
     with ab1:
-        st.markdown('<div class="vw-section-label">Bias Dimensions Detected</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vw-label">Bias Dimensions Detected</div>', unsafe_allow_html=True)
         dims = [
             ("Gender Bias",              "Gender, name, or parental status used as decision factor"),
             ("Age Discrimination",        "Unfair weighting of age group or seniority"),
@@ -2322,42 +2173,42 @@ with tab_about:
         ]
         for name, desc in dims:
             st.markdown(
-                f'<div class="md3-card outlined" style="margin-bottom:0.4rem;">'
-                f'<div class="md3-card-label">{name}</div>'
-                f'<div class="md3-card-value" style="font-size:0.875rem;">{desc}</div>'
+                f'<div class="card" style="margin-bottom:8px;">'
+                f'<div class="card-label">{name}</div>'
+                f'<div class="card-value" style="font-size:0.875rem;">{desc}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
     with ab2:
-        st.markdown('<div class="vw-section-label">V7 Changelog</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vw-label">V8 Changelog</div>', unsafe_allow_html=True)
         changes = [
-            ("🔧", "Schema Migration",  "text_hash fix — no more OperationalError"),
-            ("🎨", "Material Design 3", "Full Google enterprise token system"),
-            ("⭕", "SVG Risk Ring",     "Animated confidence arc"),
-            ("📱", "Top App Bar",       "Google-style sticky header"),
-            ("🃏", "MD3 Cards",         "Elevation + tonal surface system"),
-            ("📄", "File Upload",       ".txt + .pdf support"),
-            ("🎯", "Bias Phrases",      "Model-extracted proxy phrases"),
-            ("⚖️", "Legal Cite",         "Laws per case"),
-            ("🔁", "Dup Detection",     "SHA-256 hash skip"),
-            ("👍", "Feedback",          "Per-report ratings"),
-            ("📊", "Batch CSV",         "Bulk analysis up to 10"),
-            ("📈", "Trend Chart",       "Daily bias rate"),
+            ("🔧", "Layout Fix",       "2+1 result grid, aligned cards"),
+            ("🎨", "DM Sans",          "Refined typography system"),
+            ("⭕", "SVG Ring",         "Properly centred confidence arc"),
+            ("📱", "App Bar",          "Cleaner sticky header"),
+            ("🃏", "Cards",            "Consistent heights + hover"),
+            ("📄", "File Upload",      ".txt + .pdf support"),
+            ("🎯", "Bias Phrases",     "Model-extracted proxy phrases"),
+            ("⚖️", "Legal Cite",       "Laws per case"),
+            ("🔁", "Dup Detection",    "SHA-256 hash skip"),
+            ("👍", "Feedback",         "Per-report ratings"),
+            ("📊", "Batch CSV",        "Bulk analysis up to 10"),
+            ("📈", "Trend Chart",      "Daily bias rate"),
         ]
-        ch_html = '<div class="md3-card outlined" style="padding:0.5rem 1.5rem;">'
+        ch_html = '<div class="card" style="padding:0.5rem 1.3rem;">'
         for icon, name, desc in changes:
             ch_html += (
-                f'<div class="feature-row">'
-                f'<span class="feature-name">{icon} {name}</span>'
-                f'<span class="feature-desc">{desc}</span>'
+                f'<div class="feat-row">'
+                f'<span class="feat-name">{icon} {name}</span>'
+                f'<span class="feat-desc">{desc}</span>'
                 f'</div>'
             )
         ch_html += '</div>'
         st.markdown(ch_html, unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown('<div class="vw-section-label">Tech Stack</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vw-label">Tech Stack</div>', unsafe_allow_html=True)
         tech = [
             ("⚡ Groq",          "LLM inference platform"),
             ("🦙 Llama 3.3 70B", "Language model"),
@@ -2365,14 +2216,14 @@ with tab_about:
             ("🗄 SQLAlchemy",    "ORM + SQLite"),
             ("📊 Plotly",        "Interactive charts"),
             ("📄 PyMuPDF",       "PDF text extraction"),
-            ("🎨 Material 3",    "Google design system"),
+            ("✏️ DM Sans",       "V8 design system"),
         ]
-        t_html = '<div class="md3-card tonal" style="padding:0.5rem 1.5rem;">'
+        t_html = '<div class="card muted" style="padding:0.5rem 1.3rem;">'
         for name, desc in tech:
             t_html += (
-                f'<div class="feature-row">'
-                f'<span class="feature-name">{name}</span>'
-                f'<span class="feature-desc">{desc}</span>'
+                f'<div class="feat-row">'
+                f'<span class="feat-name">{name}</span>'
+                f'<span class="feat-desc">{desc}</span>'
                 f'</div>'
             )
         t_html += '</div>'
@@ -2380,20 +2231,19 @@ with tab_about:
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(
-            '<div class="md3-card filled-warning">'
-            '<div class="md3-card-label">⚠ Legal Disclaimer</div>'
-            '<div class="md3-card-value" style="font-size:0.86rem;">'
+            '<div class="card w-fill">'
+            '<div class="card-label">⚠ Legal Disclaimer</div>'
+            '<div class="card-value" style="font-size:0.86rem;">'
             'Not legal advice. Built for educational and awareness purposes. '
             'Consult a qualified legal professional for discrimination claims.'
             '</div></div>',
             unsafe_allow_html=True,
         )
 
-# FOOTER
+# ── FOOTER
 st.markdown(
     '<div class="vw-footer">'
-    'Verdict Watch V7 Enterprise  ·  Powered by Groq / Llama 3.3 70B  ·  '
-    'Material Design 3  ·  Not Legal Advice'
+    'Verdict Watch V8 Enterprise  ·  Powered by Groq / Llama 3.3 70B  ·  Not Legal Advice'
     '</div>',
     unsafe_allow_html=True,
 )
