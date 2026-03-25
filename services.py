@@ -1,22 +1,42 @@
 """
-services.py — Verdict Watch
-Database models + all 3 Groq API calls + full pipeline
+services.py — Verdict Watch V5
+Database models + 3-chain Groq pipeline + enterprise additions:
+  - Feedback / rating system
+  - Duplicate analysis detection (text hashing)
+  - Trend data helpers
+  - Retry logic on Groq calls
+  - Structured logging
 """
 
 import os
 import json
 import uuid
-from datetime import datetime
+import hashlib
+import logging
+import time
+from datetime import datetime, date
+from typing import Optional
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, String, Boolean, Float, Text, DateTime
+from sqlalchemy import create_engine, Column, String, Boolean, Float, Text, DateTime, Integer
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from groq import Groq
 
 load_dotenv()
 
 # ─────────────────────────────────────────────
-# DATABASE SETUP (SQLite — zero config)
+# LOGGING
+# ─────────────────────────────────────────────
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("verdict_watch")
+
+# ─────────────────────────────────────────────
+# DATABASE SETUP
 # ─────────────────────────────────────────────
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./verdict_watch.db")
@@ -28,74 +48,143 @@ Base = declarative_base()
 class Analysis(Base):
     __tablename__ = "analyses"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    raw_text = Column(Text, nullable=False)
-    decision_type = Column(String, nullable=False)
-    extracted_factors = Column(Text)          # JSON string
-    submitted_at = Column(DateTime, default=datetime.utcnow)
+    id              = Column(String,  primary_key=True, default=lambda: str(uuid.uuid4()))
+    raw_text        = Column(Text,    nullable=False)
+    text_hash       = Column(String,  index=True)          # SHA-256 of stripped text
+    decision_type   = Column(String,  nullable=False)
+    extracted_factors = Column(Text)                       # JSON string
+    submitted_at    = Column(DateTime, default=datetime.utcnow)
 
 
 class Report(Base):
     __tablename__ = "reports"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    analysis_id = Column(String, nullable=False)
-    bias_found = Column(Boolean, default=False)
-    bias_types = Column(Text)                 # JSON list as string
+    id                      = Column(String,  primary_key=True, default=lambda: str(uuid.uuid4()))
+    analysis_id             = Column(String,  nullable=False)
+    bias_found              = Column(Boolean, default=False)
+    bias_types              = Column(Text)                 # JSON list
     affected_characteristic = Column(String)
-    original_outcome = Column(String)
-    fair_outcome = Column(String)
-    explanation = Column(Text)
-    confidence_score = Column(Float, default=0.0)
-    recommendations = Column(Text)            # JSON list as string
+    original_outcome        = Column(String)
+    fair_outcome            = Column(String)
+    explanation             = Column(Text)
+    confidence_score        = Column(Float,  default=0.0)
+    recommendations         = Column(Text)                 # JSON list
+    created_at              = Column(DateTime, default=datetime.utcnow)
+
+
+class Feedback(Base):
+    """User ratings on analysis quality — drives future QA."""
+    __tablename__ = "feedback"
+
+    id         = Column(String,  primary_key=True, default=lambda: str(uuid.uuid4()))
+    report_id  = Column(String,  nullable=False, index=True)
+    rating     = Column(Integer, nullable=False)           # 1 = helpful, 0 = not helpful
+    comment    = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db():
     """Create all tables if they don't exist."""
     Base.metadata.create_all(bind=engine)
+    log.info("Database initialised.")
 
 
-# ✅ FIXED: Removed pointless try/except that could never catch anything
 def get_db() -> Session:
     return SessionLocal()
 
 
 # ─────────────────────────────────────────────
-# GROQ CLIENT
+# TEXT HASHING (duplicate detection)
 # ─────────────────────────────────────────────
+
+def hash_text(text: str) -> str:
+    normalised = " ".join(text.lower().split())
+    return hashlib.sha256(normalised.encode()).hexdigest()
+
+
+def find_duplicate(text_hash: str) -> Optional[dict]:
+    """Return the most recent report for this exact text, or None."""
+    db = get_db()
+    try:
+        analysis = (
+            db.query(Analysis)
+            .filter(Analysis.text_hash == text_hash)
+            .order_by(Analysis.submitted_at.desc())
+            .first()
+        )
+        if not analysis:
+            return None
+        report = db.query(Report).filter(Report.analysis_id == analysis.id).first()
+        return build_report_dict(report) if report else None
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────
+# GROQ CLIENT + RESILIENT CALL
+# ─────────────────────────────────────────────
+
+_MODEL = "llama-3.3-70b-versatile"
+_MAX_RETRIES = 3
+_RETRY_DELAY = 1.5  # seconds
+
 
 def get_groq_client() -> Groq:
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise ValueError("GROQ_API_KEY not set in .env file")
+        raise ValueError(
+            "GROQ_API_KEY is not set. "
+            "Add it to your .env file: GROQ_API_KEY=gsk_..."
+        )
     return Groq(api_key=api_key)
 
 
-def call_groq(prompt: str, system: str) -> dict:
+def call_groq(prompt: str, system: str, step_label: str = "") -> dict:
     """
-    Single Groq call. Returns parsed JSON dict.
-    Model: llama-3.3-70b-versatile (fast + free on Groq).
+    Resilient Groq call with exponential-backoff retry.
+    Returns parsed JSON dict.
     """
     client = get_groq_client()
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        max_tokens=1024,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    raw = response.choices[0].message.content.strip()
 
-    # Strip markdown fences if present
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            log.info("Groq call %s — attempt %d/%d", step_label, attempt, _MAX_RETRIES)
+            response = client.chat.completions.create(
+                model=_MODEL,
+                max_tokens=1024,
+                temperature=0.1,          # low temp → deterministic, reliable JSON
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": prompt},
+                ],
+            )
+            raw = response.choices[0].message.content.strip()
 
-    return json.loads(raw)
+            # Strip markdown fences if model adds them
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            raw = raw.strip()
+
+            parsed = json.loads(raw)
+            log.info("Groq call %s succeeded on attempt %d", step_label, attempt)
+            return parsed
+
+        except json.JSONDecodeError as e:
+            log.warning("JSON parse error on attempt %d: %s", attempt, e)
+            if attempt == _MAX_RETRIES:
+                raise ValueError(
+                    f"AI returned invalid JSON after {_MAX_RETRIES} attempts. "
+                    "Please try again."
+                )
+        except Exception as e:
+            log.warning("Groq error on attempt %d: %s", attempt, e)
+            if attempt == _MAX_RETRIES:
+                raise
+            time.sleep(_RETRY_DELAY * attempt)
+
+    raise ValueError("Groq pipeline failed — all retries exhausted.")
 
 
 # ─────────────────────────────────────────────
@@ -103,26 +192,17 @@ def call_groq(prompt: str, system: str) -> dict:
 # ─────────────────────────────────────────────
 
 def extract_factors(decision_text: str, decision_type: str) -> dict:
-    """
-    Call 1: Extract what criteria and factors were used in the decision.
-    Returns JSON with keys:
-      decision_type, outcome, criteria_used, data_points_weighted,
-      protected_characteristics_mentioned
-    """
     system = (
         "You are a decision analysis expert. "
-        "Read the automated decision text the user provides and extract a JSON object. "
+        "Read the automated decision text and extract a JSON object. "
         "Return ONLY valid JSON with these exact keys: "
-        "decision_type (string), outcome (accepted/rejected/approved/denied), "
+        "decision_type (string), outcome (accepted/rejected/approved/denied/other), "
         "criteria_used (list of strings), data_points_weighted (list of strings), "
         "protected_characteristics_mentioned (list of strings). "
-        "Return ONLY valid JSON. No explanation. No markdown."
+        "No explanation. No markdown."
     )
-    prompt = (
-        f"Decision type hint: {decision_type}\n\n"
-        f"Decision text:\n{decision_text}"
-    )
-    return call_groq(prompt, system)
+    prompt = f"Decision type hint: {decision_type}\n\nDecision text:\n{decision_text}"
+    return call_groq(prompt, system, step_label="STEP-1/extract_factors")
 
 
 # ─────────────────────────────────────────────
@@ -130,25 +210,20 @@ def extract_factors(decision_text: str, decision_type: str) -> dict:
 # ─────────────────────────────────────────────
 
 def detect_bias(extracted_factors: dict) -> dict:
-    """
-    Call 2: Analyse extracted factors for hidden bias.
-    Returns JSON with keys:
-      bias_detected (bool), bias_types (list), which_characteristic_affected (string),
-      bias_evidence (string), confidence (float 0-1), severity (low/medium/high)
-    """
     system = (
-        "You are a fairness and bias expert. "
-        "Analyse the extracted decision factors provided and detect any hidden bias "
-        "against protected characteristics such as gender, age, race, geography, "
-        "name-based ethnicity proxies, disability, or socioeconomic status. "
+        "You are a fairness and algorithmic bias expert. "
+        "Analyse the extracted decision factors for hidden bias against protected "
+        "characteristics: gender, age, race, geography, name-based proxies, disability, "
+        "or socioeconomic status. "
         "Return ONLY valid JSON with these exact keys: "
         "bias_detected (boolean), bias_types (list of strings), "
         "which_characteristic_affected (string), bias_evidence (string), "
-        "confidence (float between 0 and 1), severity (low or medium or high). "
-        "Return ONLY valid JSON. No explanation. No markdown."
+        "confidence (float 0-1), severity (low or medium or high), "
+        "bias_phrases (list of up to 5 specific words/phrases from the text that signal bias). "
+        "No explanation. No markdown."
     )
     prompt = f"Extracted decision factors:\n{json.dumps(extracted_factors, indent=2)}"
-    return call_groq(prompt, system)
+    return call_groq(prompt, system, step_label="STEP-2/detect_bias")
 
 
 # ─────────────────────────────────────────────
@@ -156,21 +231,16 @@ def detect_bias(extracted_factors: dict) -> dict:
 # ─────────────────────────────────────────────
 
 def generate_fair_outcome(extracted: dict, bias_result: dict) -> dict:
-    """
-    Call 3: Generate what the fair decision should have been.
-    Returns JSON with keys:
-      fair_outcome (string), fair_reasoning (string),
-      what_was_wrong (string), next_steps (list of 3 strings)
-    """
     system = (
-        "You are a fair decision expert. "
-        "Given the original decision outcome and evidence of bias, "
-        "determine what the fair outcome should have been and explain it in plain English. "
+        "You are a fair decision expert and civil rights advisor. "
+        "Given the original decision outcome and bias evidence, "
+        "determine the fair outcome and explain it in plain English. "
         "Return ONLY valid JSON with these exact keys: "
         "fair_outcome (string), fair_reasoning (string), "
         "what_was_wrong (simple plain English string for the affected person), "
-        "next_steps (list of exactly 3 strings — actionable steps the person can take). "
-        "Return ONLY valid JSON. No explanation. No markdown."
+        "next_steps (list of exactly 3 actionable strings), "
+        "legal_frameworks (list of up to 2 relevant laws or regulations, e.g. 'Title VII of the Civil Rights Act'). "
+        "No explanation. No markdown."
     )
     prompt = (
         f"Original outcome: {extracted.get('outcome', 'unknown')}\n"
@@ -179,25 +249,33 @@ def generate_fair_outcome(extracted: dict, bias_result: dict) -> dict:
         f"Bias types: {json.dumps(bias_result.get('bias_types', []))}\n"
         f"Characteristic affected: {bias_result.get('which_characteristic_affected', 'unknown')}"
     )
-    return call_groq(prompt, system)
+    return call_groq(prompt, system, step_label="STEP-3/fair_outcome")
 
 
 # ─────────────────────────────────────────────
-# FULL PIPELINE — CHAINS ALL 3 CALLS + SAVES DB
+# FULL PIPELINE
 # ─────────────────────────────────────────────
 
-def run_full_pipeline(decision_text: str, decision_type: str) -> dict:
+def run_full_pipeline(
+    decision_text: str,
+    decision_type: str,
+    progress_callback=None,          # optional callable(step: int, label: str)
+) -> dict:
     """
-    Runs the 3-call Groq pipeline, saves to DB, returns full report dict.
+    Chains all 3 Groq calls, saves to DB, returns full report dict.
+    progress_callback(step, label) is called after each step if provided.
     """
+    text_hash = hash_text(decision_text)
     db: Session = get_db()
     try:
-        # ── Call 1: Extract
+        # ── Step 1
+        if progress_callback:
+            progress_callback(1, "Extracting decision criteria…")
         extracted = extract_factors(decision_text, decision_type)
 
-        # ── Save Analysis row
         analysis = Analysis(
             raw_text=decision_text,
+            text_hash=text_hash,
             decision_type=decision_type,
             extracted_factors=json.dumps(extracted),
         )
@@ -205,30 +283,128 @@ def run_full_pipeline(decision_text: str, decision_type: str) -> dict:
         db.commit()
         db.refresh(analysis)
 
-        # ── Call 2: Detect Bias
+        # ── Step 2
+        if progress_callback:
+            progress_callback(2, "Scanning for bias patterns…")
         bias_result = detect_bias(extracted)
 
-        # ── Call 3: Fair Outcome
+        # ── Step 3
+        if progress_callback:
+            progress_callback(3, "Generating fair outcome…")
         fair_result = generate_fair_outcome(extracted, bias_result)
 
-        # ── Save Report row
         report = Report(
-            analysis_id=analysis.id,
-            bias_found=bias_result.get("bias_detected", False),
-            bias_types=json.dumps(bias_result.get("bias_types", [])),
-            affected_characteristic=bias_result.get("which_characteristic_affected", ""),
-            original_outcome=extracted.get("outcome", ""),
-            fair_outcome=fair_result.get("fair_outcome", ""),
-            explanation=fair_result.get("what_was_wrong", ""),
-            confidence_score=float(bias_result.get("confidence", 0.0)),
-            recommendations=json.dumps(fair_result.get("next_steps", [])),
+            analysis_id             = analysis.id,
+            bias_found              = bias_result.get("bias_detected", False),
+            bias_types              = json.dumps(bias_result.get("bias_types", [])),
+            affected_characteristic = bias_result.get("which_characteristic_affected", ""),
+            original_outcome        = extracted.get("outcome", ""),
+            fair_outcome            = fair_result.get("fair_outcome", ""),
+            explanation             = fair_result.get("what_was_wrong", ""),
+            confidence_score        = float(bias_result.get("confidence", 0.0)),
+            recommendations         = json.dumps(fair_result.get("next_steps", [])),
         )
+        # Store extra V5 fields in existing columns via JSON extension
+        # bias_phrases and legal_frameworks appended to explanation as structured JSON
+        report_extra = {
+            "bias_phrases":     bias_result.get("bias_phrases", []),
+            "legal_frameworks": fair_result.get("legal_frameworks", []),
+            "fair_reasoning":   fair_result.get("fair_reasoning", ""),
+            "severity":         bias_result.get("severity", "low"),
+            "bias_evidence":    bias_result.get("bias_evidence", ""),
+        }
+        # Store in a reserved column (recommendations JSON dict extension)
+        full_recs_payload = {
+            "steps":  fair_result.get("next_steps", []),
+            "extra":  report_extra,
+        }
+        report.recommendations = json.dumps(full_recs_payload)
+
         db.add(report)
         db.commit()
         db.refresh(report)
 
+        log.info("Pipeline complete — report_id=%s bias=%s conf=%.2f",
+                 report.id, report.bias_found, report.confidence_score)
         return build_report_dict(report)
 
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────
+# APPEALS LETTER
+# ─────────────────────────────────────────────
+
+def generate_appeal_letter(report: dict, decision_text: str, decision_type: str) -> str:
+    client = get_groq_client()
+    bias_types  = ", ".join(report.get("bias_types", [])) or "undisclosed bias"
+    affected    = report.get("affected_characteristic", "a protected characteristic")
+    explanation = report.get("explanation", "")
+    fair_outcome = report.get("fair_outcome", "a fair reassessment")
+    frameworks  = report.get("legal_frameworks", [])
+    law_ref     = (", ".join(frameworks) + " and related anti-discrimination law") if frameworks else "applicable anti-discrimination law"
+
+    system = (
+        "You are an expert legal writer specialising in discrimination and civil rights cases. "
+        "Write formal, persuasive appeal letters. "
+        "Use [DATE], [YOUR NAME], [YOUR ADDRESS], [RECIPIENT NAME/TITLE], [ORGANISATION] as placeholders."
+    )
+    prompt = (
+        f"Write a formal appeal letter:\n\n"
+        f"Decision type: {decision_type}\n"
+        f"Original decision: {decision_text[:400]}\n"
+        f"Bias detected: {bias_types}\n"
+        f"Characteristic affected: {affected}\n"
+        f"What was wrong: {explanation}\n"
+        f"Fair outcome requested: {fair_outcome}\n"
+        f"Legal frameworks to cite: {law_ref}\n\n"
+        "The letter should: open professionally, reference the specific decision, "
+        "state grounds for appeal citing discriminatory factors and relevant laws, "
+        "request a formal review, and close professionally. Under 450 words."
+    )
+    resp = client.chat.completions.create(
+        model=_MODEL,
+        max_tokens=900,
+        temperature=0.3,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": prompt},
+        ],
+    )
+    return resp.choices[0].message.content.strip()
+
+
+# ─────────────────────────────────────────────
+# FEEDBACK
+# ─────────────────────────────────────────────
+
+def save_feedback(report_id: str, rating: int, comment: str = "") -> bool:
+    db = get_db()
+    try:
+        fb = Feedback(report_id=report_id, rating=rating, comment=comment)
+        db.add(fb)
+        db.commit()
+        log.info("Feedback saved — report_id=%s rating=%d", report_id, rating)
+        return True
+    except Exception as e:
+        log.error("Failed to save feedback: %s", e)
+        return False
+    finally:
+        db.close()
+
+
+def get_feedback_stats() -> dict:
+    db = get_db()
+    try:
+        all_fb = db.query(Feedback).all()
+        if not all_fb:
+            return {"total": 0, "helpful_pct": 0}
+        helpful = sum(1 for f in all_fb if f.rating == 1)
+        return {
+            "total": len(all_fb),
+            "helpful_pct": round(helpful / len(all_fb) * 100),
+        }
     finally:
         db.close()
 
@@ -238,23 +414,38 @@ def run_full_pipeline(decision_text: str, decision_type: str) -> dict:
 # ─────────────────────────────────────────────
 
 def build_report_dict(report: Report) -> dict:
+    # Handle both old format (plain list) and new V5 format (dict with steps+extra)
+    recs_raw = json.loads(report.recommendations or "[]")
+    if isinstance(recs_raw, dict):
+        recommendations = recs_raw.get("steps", [])
+        extra           = recs_raw.get("extra", {})
+    else:
+        recommendations = recs_raw
+        extra           = {}
+
     return {
-        "id": report.id,
-        "analysis_id": report.analysis_id,
-        "bias_found": report.bias_found,
-        "bias_types": json.loads(report.bias_types or "[]"),
+        "id":                     report.id,
+        "analysis_id":            report.analysis_id,
+        "bias_found":             report.bias_found,
+        "bias_types":             json.loads(report.bias_types or "[]"),
         "affected_characteristic": report.affected_characteristic,
-        "original_outcome": report.original_outcome,
-        "fair_outcome": report.fair_outcome,
-        "explanation": report.explanation,
-        "confidence_score": report.confidence_score,
-        "recommendations": json.loads(report.recommendations or "[]"),
-        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "original_outcome":       report.original_outcome,
+        "fair_outcome":           report.fair_outcome,
+        "explanation":            report.explanation,
+        "confidence_score":       report.confidence_score,
+        "recommendations":        recommendations,
+        "created_at":             report.created_at.isoformat() if report.created_at else None,
+        # V5 extras
+        "bias_phrases":           extra.get("bias_phrases", []),
+        "legal_frameworks":       extra.get("legal_frameworks", []),
+        "fair_reasoning":         extra.get("fair_reasoning", ""),
+        "severity":               extra.get("severity", "low"),
+        "bias_evidence":          extra.get("bias_evidence", ""),
     }
 
 
 def get_all_reports() -> list[dict]:
-    db: Session = get_db()
+    db = get_db()
     try:
         rows = db.query(Report).order_by(Report.created_at.desc()).all()
         return [build_report_dict(r) for r in rows]
@@ -263,7 +454,7 @@ def get_all_reports() -> list[dict]:
 
 
 def get_report_by_id(report_id: str) -> dict | None:
-    db: Session = get_db()
+    db = get_db()
     try:
         row = db.query(Report).filter(Report.id == report_id).first()
         return build_report_dict(row) if row else None
@@ -271,19 +462,45 @@ def get_report_by_id(report_id: str) -> dict | None:
         db.close()
 
 
+def get_trend_data() -> list[dict]:
+    """Daily bias rate for the last 30 days — used in dashboard trend chart."""
+    db = get_db()
+    try:
+        rows = db.query(Report).order_by(Report.created_at.asc()).all()
+        by_day: dict[str, dict] = {}
+        for r in rows:
+            day = (r.created_at or datetime.utcnow()).strftime("%Y-%m-%d")
+            if day not in by_day:
+                by_day[day] = {"total": 0, "bias": 0}
+            by_day[day]["total"] += 1
+            if r.bias_found:
+                by_day[day]["bias"] += 1
+
+        return [
+            {
+                "date": d,
+                "total": v["total"],
+                "bias": v["bias"],
+                "bias_rate": round(v["bias"] / v["total"] * 100) if v["total"] else 0,
+            }
+            for d, v in sorted(by_day.items())
+        ]
+    finally:
+        db.close()
+
+
 def get_all_analyses_summary() -> list[dict]:
-    """Used by the Streamlit history table."""
-    db: Session = get_db()
+    db = get_db()
     try:
         analyses = db.query(Analysis).order_by(Analysis.submitted_at.desc()).all()
         result = []
         for a in analyses:
             report = db.query(Report).filter(Report.analysis_id == a.id).first()
             result.append({
-                "id": a.id,
-                "decision_type": a.decision_type,
-                "submitted_at": a.submitted_at.isoformat() if a.submitted_at else None,
-                "bias_found": report.bias_found if report else None,
+                "id":               a.id,
+                "decision_type":    a.decision_type,
+                "submitted_at":     a.submitted_at.isoformat() if a.submitted_at else None,
+                "bias_found":       report.bias_found if report else None,
                 "confidence_score": report.confidence_score if report else None,
             })
         return result
