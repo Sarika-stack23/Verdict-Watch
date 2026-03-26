@@ -1,27 +1,27 @@
-# Verdict Watch V7 — Requirements
-# Google Enterprise Edition
+# Verdict Watch V11 — Requirements
+# Full-stack: FastAPI backend + Streamlit frontend
 
 # ── Core API & Server
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
-httpx
-python-dotenv
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+httpx>=0.27.0
+python-dotenv>=1.0.0
 
 # ── UI
-streamlit>=1.32.0
+streamlit>=1.35.0
 
 # ── Database
-sqlalchemy
+sqlalchemy>=2.0.0
 
 # ── AI — Primary pipeline
-groq
+groq>=0.9.0
 
 # ── Charts & Data
-plotly
-pandas
+plotly>=5.22.0
+pandas>=2.2.0
 
 # ── File parsing
-PyMuPDF          # PDF extraction (pip name: PyMuPDF → import fitz)
-python-docx      # DOCX extractions
+PyMuPDF          # PDF extraction  (import fitz)
+python-docx      # DOCX extraction
