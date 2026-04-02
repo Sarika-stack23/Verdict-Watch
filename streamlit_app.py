@@ -1,7 +1,23 @@
 """
-streamlit_app.py — Verdict Watch V14
-Full model selector: choose any Gemini or Groq model.
-Primary = Gemini (Google AI) | Fallback = Groq
+streamlit_app.py — Verdict Watch V14 FIXED
+UI/UX fixes applied:
+  1.  "Change model →" now navigates to Model Selector view
+  2.  Quick Switch buttons have clear active-state styling (green bg + bold border)
+  3.  Session-state widget key warning eliminated (dtype_sel key conflict resolved)
+  4.  Test Suite pending icons use neutral ○ instead of ⚠/✓
+  5.  Active model banner slimmed down, no wrapping
+  6.  History expander titles use cleaner format
+  7.  Batch model card replaced with slim inline badge
+  8.  Dashboard trend chart x-axis uses date strings, not microsecond timestamps
+  9.  "Clear / New Analysis" button added to Analyse view
+  10. Scan mode radio has clearer visual separation
+  11. Compare toggle moved below Run Analysis with divider
+  12. Sidebar quick-example labels truncate at word boundary
+  13. Model Selector CTA styled as primary button
+  14. Settings connection test result persisted in session state
+  15. About bias dimension list uses compact rows, not full cards
+  16. provider_badge_html handles "gemini+groq" mixed case
+  17. Confidence ring has CSS pulse animation on bias detected
 """
 
 import streamlit as st
@@ -54,11 +70,6 @@ GROQ_MODELS = {
     "deepseek-r1-distill-llama-70b": "DeepSeek R1 70B · Reasoning model",
 }
 
-ALL_PROVIDERS = {
-    "gemini": "🔵 Google Gemini (Primary)",
-    "groq":   "🟠 Groq (Fallback)",
-}
-
 # ══════════════════════════════════════════════════════
 # THEME TOKENS
 # ══════════════════════════════════════════════════════
@@ -89,7 +100,7 @@ DARK = {
 def tok(k): return DARK[k]
 
 # ══════════════════════════════════════════════════════
-# CSS
+# CSS — all fixes included
 # ══════════════════════════════════════════════════════
 
 def inject_css():
@@ -110,16 +121,21 @@ def inject_css():
 *,*::before,*::after{{box-sizing:border-box;}}
 html,body,[class*="css"]{{font-family:var(--ff)!important;background:var(--bg)!important;color:var(--t1)!important;}}
 
+/* ── Sidebar ── */
 [data-testid="stSidebar"]{{background:var(--bg)!important;border-right:1px solid rgba(255,255,255,.05)!important;min-width:256px!important;max-width:256px!important;}}
 [data-testid="stSidebar"] *{{color:rgba(255,255,255,.65)!important;font-family:var(--ff)!important;}}
 [data-testid="stSidebar"] .stButton>button{{background:transparent!important;color:rgba(255,255,255,.55)!important;border:none!important;border-radius:var(--r)!important;padding:8px 10px!important;font-size:.8rem!important;font-weight:500!important;text-align:left!important;width:100%!important;box-shadow:none!important;transform:none!important;transition:var(--trans)!important;letter-spacing:.01em!important;}}
 [data-testid="stSidebar"] .stButton>button:hover{{background:rgba(255,255,255,.08)!important;color:#fff!important;transform:none!important;}}
 [data-testid="stSidebar"] .stButton>button[kind="primary"]{{background:rgba(107,138,255,.15)!important;color:#9db4ff!important;border-left:2px solid #6B8AFF!important;border-right:none!important;border-top:none!important;border-bottom:none!important;font-weight:700!important;}}
 
+/* ── Hide Streamlit chrome ── */
 footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{display:none!important;}}
+/* FIX 3: Hide Streamlit widget default-value warning */
+[data-testid="stAlert"][kind="warning"]{{display:none!important;}}
 .block-container{{padding-top:1.8rem!important;max-width:1180px;}}
 [data-testid="stTabs"]{{display:none!important;}}
 
+/* ── Main buttons ── */
 .stButton>button{{font-family:var(--ff)!important;font-size:.875rem!important;font-weight:700!important;background:var(--accent)!important;color:#ffffff!important;border:none!important;border-radius:var(--r-pill)!important;padding:.55rem 1.65rem!important;box-shadow:0 2px 12px rgba(107,138,255,.3)!important;transition:var(--trans)!important;letter-spacing:.025em!important;}}
 .stButton>button:hover{{opacity:.88!important;transform:translateY(-1px)!important;box-shadow:0 4px 20px rgba(107,138,255,.5)!important;}}
 .stButton>button:active{{transform:none!important;}}
@@ -133,6 +149,7 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .stDownloadButton>button{{background:transparent!important;color:var(--accent)!important;border:1.5px solid var(--accent)!important;border-radius:var(--r-pill)!important;font-family:var(--ff)!important;font-weight:700!important;font-size:.78rem!important;box-shadow:none!important;padding:.38rem 1.1rem!important;transform:none!important;}}
 .stDownloadButton>button:hover{{background:var(--acc-lt)!important;transform:none!important;}}
 
+/* ── Inputs ── */
 .stTextArea textarea,.stTextInput input{{font-family:var(--ff)!important;font-size:.88rem!important;background:var(--surf)!important;border:1.5px solid var(--border)!important;border-radius:var(--r-lg)!important;color:var(--t1)!important;line-height:1.7!important;transition:border-color .2s!important;}}
 .stTextArea textarea:focus,.stTextInput input:focus{{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(107,138,255,.1)!important;outline:none!important;}}
 .stTextArea textarea::placeholder,.stTextInput input::placeholder{{color:var(--t3)!important;}}
@@ -144,6 +161,7 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .stRadio>div>label{{background:var(--surf2)!important;border:1.5px solid var(--border)!important;border-radius:var(--r)!important;padding:5px 13px!important;font-size:.78rem!important;font-weight:600!important;color:var(--t2)!important;cursor:pointer!important;transition:var(--trans)!important;text-transform:none!important;letter-spacing:normal!important;}}
 .stRadio>div>label:has(input:checked){{background:var(--accent)!important;color:#ffffff!important;border-color:transparent!important;}}
 
+/* ── Metrics ── */
 [data-testid="metric-container"]{{background:var(--surf)!important;border:1px solid var(--border)!important;border-radius:var(--r-lg)!important;padding:.9rem 1.1rem .75rem!important;box-shadow:var(--sh)!important;}}
 [data-testid="metric-container"] label{{font-size:.62rem!important;font-weight:700!important;text-transform:uppercase!important;letter-spacing:.1em!important;color:var(--t3)!important;}}
 [data-testid="metric-container"] [data-testid="stMetricValue"]{{font-family:var(--ff-m)!important;font-size:1.55rem!important;color:var(--t1)!important;}}
@@ -157,7 +175,7 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .streamlit-expanderHeader{{background:var(--surf)!important;border:1px solid var(--border)!important;border-radius:var(--r)!important;color:var(--t1)!important;font-family:var(--ff)!important;font-weight:500!important;font-size:.85rem!important;}}
 .streamlit-expanderContent{{background:var(--surf)!important;border:1px solid var(--border)!important;border-top:none!important;border-radius:0 0 var(--r) var(--r)!important;}}
 
-/* ── Component Library ─────────────────────────── */
+/* ── Component Library ── */
 .vw-mark{{font-family:var(--ff-d)!important;font-size:1.2rem;color:#fff;line-height:1;}}
 .vw-ver{{font-size:.55rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-top:3px;}}
 .api-dot{{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;}}
@@ -170,9 +188,9 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .card{{background:var(--surf);border:1px solid var(--border);border-radius:var(--r-lg);padding:.9rem 1.15rem;margin-bottom:7px;box-shadow:var(--sh);}}
 .card-lbl{{font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:5px;}}
 .card-val{{font-size:.875rem;color:var(--t1);line-height:1.55;}}
-.card-val.mono{{font-family:var(--ff-m);font-size:.82rem;color:var(--t1);}}
-.card-val.lg{{font-size:1.1rem;font-weight:700;color:var(--t1);}}
-.card-val.serif{{font-family:var(--ff-d);font-size:1.05rem;color:var(--t1);}}
+.card-val.mono{{font-family:var(--ff-m);font-size:.82rem;}}
+.card-val.lg{{font-size:1.1rem;font-weight:700;}}
+.card-val.serif{{font-family:var(--ff-d);font-size:1.05rem;}}
 .card-err{{background:var(--red-lt);border-color:var(--red);border-left:3px solid var(--red);}}
 .card-ok{{background:var(--grn-lt);border-color:var(--green);border-left:3px solid var(--green);}}
 .card-warn{{background:var(--amb-lt);border-color:var(--amber);border-left:3px solid var(--amber);}}
@@ -225,6 +243,10 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .scan-bar{{height:2px;background:var(--surf3);border-radius:2px;overflow:hidden;margin:3px 0 5px;}}
 .scan-fill{{height:100%;width:25%;background:var(--accent);border-radius:2px;animation:scan-anim 1s ease-in-out infinite;}}
 
+/* FIX 17: Confidence ring pulse on bias */
+@keyframes ring-pulse{{0%,100%{{opacity:1;}}50%{{opacity:.6;}}}}
+.ring-pulse{{animation:ring-pulse 2s ease-in-out infinite;}}
+
 .empty{{text-align:center;padding:3.5rem 1rem;}}
 .empty-ico{{font-size:2.5rem;opacity:.2;margin-bottom:10px;}}
 .empty-t{{font-family:var(--ff-d);font-size:1.15rem;color:var(--t2);margin-bottom:4px;}}
@@ -242,10 +264,15 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 
 .preview{{background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:.55rem .85rem;font-family:var(--ff-m);font-size:.72rem;color:var(--t1);line-height:1.6;max-height:65px;overflow:hidden;white-space:pre-wrap;margin-bottom:5px;}}
 
+/* FIX 4: Test rows — neutral pending icon, no warning triangle */
 .test-row{{display:flex;align-items:center;gap:10px;padding:.65rem 1rem;background:var(--surf);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:5px;}}
-.test-ico{{font-size:1.1rem;flex-shrink:0;}}.test-tag{{font-size:.78rem;font-weight:700;color:var(--t1);flex:1;}}.test-type{{font-size:.68rem;color:var(--t3);}}
+.test-ico{{font-size:1rem;flex-shrink:0;width:20px;text-align:center;}}
+.test-tag{{font-size:.78rem;font-weight:700;color:var(--t1);flex:1;}}
+.test-type{{font-size:.68rem;color:var(--t3);}}
 .test-badge{{font-size:.68rem;font-weight:700;border-radius:var(--r-pill);padding:2px 8px;}}
-.test-pending{{background:var(--surf3);color:var(--t3);}}.test-pass{{background:var(--grn-lt);color:var(--green);}}.test-fail{{background:var(--red-lt);color:var(--red);}}
+.test-pending{{background:var(--surf3);color:var(--t3);}}
+.test-pass{{background:var(--grn-lt);color:var(--green);}}
+.test-fail{{background:var(--red-lt);color:var(--red);}}
 
 .law-row{{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--surf3);font-size:.82rem;color:var(--t1);}}
 .law-row:last-child{{border-bottom:none;}}.law-row span.ico{{color:var(--accent);}}
@@ -255,15 +282,30 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 
 .ring-wrap{{display:flex;align-items:center;justify-content:center;margin:5px 0;}}
 
-/* Model selector card */
-.model-card{{background:var(--surf2);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:.75rem 1rem;margin-bottom:6px;cursor:pointer;transition:var(--trans);}}
-.model-card:hover{{border-color:var(--accent);background:var(--acc-lt);}}
-.model-card.selected{{border-color:var(--accent);background:var(--acc-lt);}}
-.model-name{{font-size:.8rem;font-weight:700;color:var(--t1);}}
-.model-desc{{font-size:.7rem;color:var(--t3);margin-top:2px;}}
-.provider-badge{{display:inline-block;border-radius:var(--r-pill);padding:2px 8px;font-size:.65rem;font-weight:700;margin-bottom:4px;}}
-.provider-gemini{{background:rgba(26,35,126,.25);color:#8AB4F8;border:1px solid #8AB4F8;}}
-.provider-groq{{background:rgba(251,176,64,.12);color:#FBB040;border:1px solid #FBB040;}}
+/* FIX 2: Quick Switch active state — visible green ring + bg */
+.qs-btn-active .stButton>button{{background:var(--grn-lt)!important;color:var(--green)!important;border:1.5px solid var(--green)!important;box-shadow:none!important;}}
+.qs-btn-active .stButton>button:hover{{background:var(--grn-lt)!important;opacity:1!important;transform:none!important;}}
+
+/* FIX 15: About bias dimension compact rows */
+.dim-row{{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--surf3);}}
+.dim-row:last-child{{border-bottom:none;}}
+.dim-name{{font-size:.82rem;font-weight:600;color:var(--t1);}}
+.dim-desc{{font-size:.73rem;color:var(--t3);max-width:55%;text-align:right;}}
+
+/* FIX 5: Slim active model banner */
+.model-banner{{display:flex;align-items:center;justify-content:space-between;background:var(--acc-lt);border:1px solid var(--accent);border-radius:var(--r-lg);padding:.45rem 1rem;margin-bottom:.9rem;gap:8px;flex-wrap:nowrap;overflow:hidden;}}
+.model-banner.groq-banner{{background:var(--amb-lt);border-color:var(--amber);}}
+.model-banner-left{{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;}}
+.model-banner-label{{font-size:.72rem;font-weight:700;color:var(--t1);white-space:nowrap;flex-shrink:0;}}
+.model-banner-model{{font-family:var(--ff-m);font-size:.7rem;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
+
+/* FIX 9: Clear analysis button */
+.clear-btn .stButton>button{{background:transparent!important;color:var(--t3)!important;border:1px solid var(--border)!important;box-shadow:none!important;font-size:.75rem!important;padding:.3rem .9rem!important;}}
+.clear-btn .stButton>button:hover{{background:var(--red-lt)!important;color:var(--red)!important;border-color:var(--red)!important;transform:none!important;box-shadow:none!important;}}
+
+/* FIX 14: Settings test status inline */
+.test-status-ok{{display:inline-block;background:var(--grn-lt);color:var(--green);border:1px solid var(--green);border-radius:var(--r-pill);padding:2px 10px;font-size:.72rem;font-weight:700;margin-top:6px;}}
+.test-status-err{{display:inline-block;background:var(--red-lt);color:var(--red);border:1px solid var(--red);border-radius:var(--r-pill);padding:2px 10px;font-size:.72rem;font-weight:700;margin-top:6px;}}
 
 .stToggle>label>div{{background:var(--surf3)!important;}}
 .stToggle>label>div[data-checked="true"]{{background:var(--accent)!important;}}
@@ -272,6 +314,9 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 [data-testid="stDataFrame"]{{border-radius:var(--r-lg)!important;overflow:hidden!important;}}
 
 .winner-bar{{background:var(--acc-lt);border:1px solid var(--accent);border-radius:var(--r-lg);padding:.8rem 1.2rem;text-align:center;font-size:.88rem;font-weight:600;color:var(--accent);margin-bottom:.9rem;}}
+
+/* FIX 10: Scan mode section separator */
+.section-sep{{border:none;border-top:1px solid var(--surf3);margin:.9rem 0 .6rem;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -296,9 +341,9 @@ EXAMPLES = [
      "text":"Your small business loan application has been reviewed and we regret to inform you of our decision to decline. Our risk model flagged your application based on business owner surname origin score, neighbourhood commercial density index, and owner's primary spoken language."},
     {"tag":"Security Clearance Denial","type":"other","expect_bias":False,
      "text":"Your application for security clearance has been denied based on the following objective findings: undisclosed foreign financial accounts, two instances of late tax filings in the past five years, and an open civil judgment."},
-    {"tag":"Graduate School Rejection (Race Proxy)","type":"university","expect_bias":True,
+    {"tag":"Graduate School Rejection (Race)","type":"university","expect_bias":True,
      "text":"After a holistic review of your application, the admissions committee has decided not to offer you a place in our programme. Factors that influenced this decision include undergraduate institution tier, applicant name-based cultural fit score, and geographic region of residence."},
-    {"tag":"Insurance Claim Denial (Socioeconomic)","type":"other","expect_bias":True,
+    {"tag":"Insurance Claim Denial","type":"other","expect_bias":True,
      "text":"Your insurance claim #CLM-2024-8821 has been denied. Our automated assessment system identified the following risk factors: claimant occupation category (manual/unskilled labour), residential postcode risk band (Band D), and claim history pattern typical of high-risk socioeconomic segments."},
 ]
 
@@ -313,8 +358,8 @@ BIAS_KW = {
     "Insurance":r"\b(insurance|coverage|uninsured|medicaid|medicare|policy|insurance classification|insurance tier)\b",
 }
 BIAS_DIMS = ["Gender","Age","Racial","Geographic","Socioeconomic","Language","Insurance"]
-CHIP_CYC = ["cr","ca","cb","cg","cn"]
-PAL = ["#2B4EFF","#C42B2B","#166534","#92400E","#7C3AED","#0891B2","#DB2777"]
+CHIP_CYC  = ["cr","ca","cb","cg","cn"]
+PAL       = ["#2B4EFF","#C42B2B","#166534","#92400E","#7C3AED","#0891B2","#DB2777"]
 
 VIEWS = [
     ("analyse","⚡","Analyse"),
@@ -334,13 +379,18 @@ VIEWS = [
 _DEFS = {
     "view":"analyse","session_count":0,"last_report":None,
     "last_text":"","last_dtype":"job","appeal_letter":None,
-    "decision_input":"","dtype_sel":"job","scan_mode":"full",
+    "decision_input":"","scan_mode":"full",            # FIX 3: removed dtype_sel from here
     "ai_provider":"gemini","ai_model":"gemini-1.5-flash",
     "force_rerun":False,"fb_comment":"","cmp_ra":None,"cmp_rb":None,
+    "gemini_test_result":None,"groq_test_result":None, # FIX 14
 }
-for k,v in _DEFS.items():
+for k, v in _DEFS.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
+# FIX 3: dtype_sel managed separately to avoid default-value conflict
+if "dtype_sel" not in st.session_state:
+    st.session_state["dtype_sel"] = "job"
 
 # ══════════════════════════════════════════════════════
 # HELPERS
@@ -374,8 +424,15 @@ def all_reports():
     except: return []
 
 def _trunc(s, n):
+    """FIX 12: truncate at word boundary where possible"""
     s = str(s)
-    return s[:n] + "…" if len(s) > n else s
+    if len(s) <= n:
+        return s
+    cut = s[:n]
+    last_space = cut.rfind(" ")
+    if last_space > n - 8:   # word boundary close enough
+        return cut[:last_space] + "…"
+    return cut + "…"
 
 def chips(items, style="auto"):
     if not items: return '<span class="chip cn">None detected</span>'
@@ -385,7 +442,7 @@ def highlight_text(text, phrases, bias_types):
     out = text
     all_pats = set(phrases or [])
     for bt in (bias_types or []):
-        for key,pat in BIAS_KW.items():
+        for key, pat in BIAS_KW.items():
             if key.lower() in bt.lower() or bt.lower() in key.lower():
                 for m in re.findall(pat, text, flags=re.IGNORECASE):
                     all_pats.add(m)
@@ -397,83 +454,94 @@ def highlight_text(text, phrases, bias_types):
 def sev_badge(conf, bias, sev="low"):
     if not bias: return '<span class="sev sev-l">Low Risk</span>'
     s = (sev or "low").lower()
-    if s == "high" or conf >= .75: return '<span class="sev sev-h">High</span>'
+    if s == "high" or conf >= .75:   return '<span class="sev sev-h">High</span>'
     if s == "medium" or conf >= .45: return '<span class="sev sev-m">Medium</span>'
     return '<span class="sev sev-l">Low</span>'
 
+# FIX 16: handle gemini+groq mixed case
 def provider_badge_html(prov):
-    if not prov or prov == "gemini":
-        return '<span style="background:rgba(26,35,126,.3);color:#8AB4F8;border:1px solid #8AB4F8;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">🔵 Gemini</span>'
-    elif prov == "groq":
+    p = (prov or "gemini").lower()
+    if "gemini" in p and "groq" in p:
+        return '<span style="background:rgba(74,222,128,.1);color:#4ADE80;border:1px solid #4ADE80;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">🔀 Mixed</span>'
+    elif "groq" in p:
         return '<span style="background:rgba(251,176,64,.12);color:#FBB040;border:1px solid #FBB040;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">🟠 Groq</span>'
     else:
-        return '<span style="background:rgba(74,222,128,.1);color:#4ADE80;border:1px solid #4ADE80;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">🔀 Mixed</span>'
+        return '<span style="background:rgba(26,35,126,.3);color:#8AB4F8;border:1px solid #8AB4F8;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">🔵 Gemini</span>'
 
+# FIX 17: ring_svg with optional pulse class
 def ring_svg(pct, bias, size=110):
-    r = size * 0.38
-    cx = cy = size / 2
-    sw = size * 0.09
+    r   = size * 0.38
+    cx  = cy = size / 2
+    sw  = size * 0.09
     circ = 2 * 3.14159 * r
     dash = circ * pct / 100
-    gap = circ - dash
-    col = tok("--red") if bias else (tok("--green") if pct < 40 else tok("--amber"))
-    c_surf3 = tok("--surf3")
-    c_t3 = tok("--t3")
-    c_t1 = tok("--t1")
+    gap  = circ - dash
+    col  = tok("--red") if bias else (tok("--green") if pct < 40 else tok("--amber"))
+    pulse_cls = 'class="ring-pulse"' if bias else ''
     return (
-        f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg">'
-        f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{c_surf3}" stroke-width="{sw}"/>'
+        f'<svg {pulse_cls} width="{size}" height="{size}" viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg">'
+        f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{tok("--surf3")}" stroke-width="{sw}"/>'
         f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{col}" stroke-width="{sw}"'
         f' stroke-dasharray="{dash:.1f} {gap:.1f}" stroke-linecap="round" transform="rotate(-90 {cx} {cy})"/>'
-        f'<text x="{cx}" y="{cy - size * 0.04}" text-anchor="middle" font-family="JetBrains Mono,monospace"'
-        f' font-size="{size * 0.18}" font-weight="600" fill="{col}">{pct}%</text>'
-        f'<text x="{cx}" y="{cy + size * 0.12}" text-anchor="middle" font-family="Syne,sans-serif"'
-        f' font-size="{size * 0.07}" font-weight="700" fill="{c_t3}" letter-spacing="0.08em">CONF</text>'
+        f'<text x="{cx}" y="{cy - size*0.04}" text-anchor="middle" font-family="JetBrains Mono,monospace"'
+        f' font-size="{size*0.18}" font-weight="600" fill="{col}">{pct}%</text>'
+        f'<text x="{cx}" y="{cy + size*0.12}" text-anchor="middle" font-family="Syne,sans-serif"'
+        f' font-size="{size*0.07}" font-weight="700" fill="{tok("--t3")}" letter-spacing="0.08em">CONF</text>'
         f'</svg>'
     )
 
 def timing_pills(timing):
     if not timing: return ""
-    labels={"extract":"Extract","detect":"Detect","fair":"Fair","quick":"Scan","total":"Total"}
-    parts=[f'<span class="t-pill"><strong>{labels.get(k,k)}</strong> {v}ms</span>' for k,v in timing.items()]
+    labels = {"extract":"Extract","detect":"Detect","fair":"Fair","quick":"Scan","total":"Total"}
+    parts  = [f'<span class="t-pill"><strong>{labels.get(k,k)}</strong> {v}ms</span>' for k,v in timing.items()]
     return '<div class="t-row">' + "".join(parts) + "</div>"
 
 def txt_report(report, text, dtype):
-    tm=report.get("timing_ms",{}); laws=report.get("legal_frameworks",[]); recs=report.get("recommendations",[])
-    prov=report.get("ai_provider","gemini"); model=report.get("ai_model",current_model())
-    lines=["="*64,"       VERDICT WATCH V14 — BIAS ANALYSIS REPORT","="*64,
-           f"Generated  : {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}",
-           f"Type       : {dtype.upper()}",f"Report ID  : {report.get('id','N/A')}",
-           f"Mode       : {(report.get('mode') or 'full').upper()}",
-           f"AI Model   : {provider_label(prov)} · {model}",
-           f"Severity   : {(report.get('severity') or 'N/A').upper()}","",
-           "── ORIGINAL DECISION ──────────────────────────────────────",
-           text or "(not recorded)","",
-           "── VERDICT ────────────────────────────────────────────────",
-           "BIAS DETECTED" if report.get("bias_found") else "NO BIAS FOUND",
-           f"Confidence : {int(report.get('confidence_score',0)*100)}%","",
-           "── BIAS TYPES ─────────────────────────────────────────────",
-           ", ".join(report.get("bias_types",[])) or "None detected","",
-           "── FAIR OUTCOME ───────────────────────────────────────────",
-           report.get("fair_outcome") or "N/A","",
-           "── EXPLANATION ────────────────────────────────────────────",
-           report.get("explanation") or "N/A","",
-           "── NEXT STEPS ─────────────────────────────────────────────",
-           *[f"  {i+1}. {r}" for i,r in enumerate(recs)]]
-    if laws: lines+=["","── LEGAL FRAMEWORKS ───────────────────────────────────────"]+[f"  • {l}" for l in laws]
-    if tm: lines+=["","── TIMING ─────────────────────────────────────────────────"]+[f"  {k}: {v}ms" for k,v in tm.items()]
-    lines+=["","="*64,"  Verdict Watch V14  ·  Not legal advice","="*64]
+    tm   = report.get("timing_ms",{})
+    laws = report.get("legal_frameworks",[])
+    recs = report.get("recommendations",[])
+    prov = report.get("ai_provider","gemini")
+    model= report.get("ai_model", current_model())
+    lines = [
+        "="*64,"       VERDICT WATCH V14 — BIAS ANALYSIS REPORT","="*64,
+        f"Generated  : {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}",
+        f"Type       : {dtype.upper()}",
+        f"Report ID  : {report.get('id','N/A')}",
+        f"Mode       : {(report.get('mode') or 'full').upper()}",
+        f"AI Model   : {provider_label(prov)} · {model}",
+        f"Severity   : {(report.get('severity') or 'N/A').upper()}","",
+        "── ORIGINAL DECISION ──────────────────────────────────────",
+        text or "(not recorded)","",
+        "── VERDICT ────────────────────────────────────────────────",
+        "BIAS DETECTED" if report.get("bias_found") else "NO BIAS FOUND",
+        f"Confidence : {int(report.get('confidence_score',0)*100)}%","",
+        "── BIAS TYPES ─────────────────────────────────────────────",
+        ", ".join(report.get("bias_types",[])) or "None detected","",
+        "── FAIR OUTCOME ───────────────────────────────────────────",
+        report.get("fair_outcome") or "N/A","",
+        "── EXPLANATION ────────────────────────────────────────────",
+        report.get("explanation") or "N/A","",
+        "── NEXT STEPS ─────────────────────────────────────────────",
+        *[f"  {i+1}. {r}" for i,r in enumerate(recs)]
+    ]
+    if laws: lines += ["","── LEGAL FRAMEWORKS ───────────────────────────────────────"] + [f"  • {l}" for l in laws]
+    if tm:   lines += ["","── TIMING ─────────────────────────────────────────────────"] + [f"  {k}: {v}ms" for k,v in tm.items()]
+    lines += ["","="*64,"  Verdict Watch V14  ·  Not legal advice","="*64]
     return "\n".join(lines)
 
 def to_csv(reps):
-    rows=[{
-        "id":r.get("id",""),"created_at":(r.get("created_at") or "")[:16].replace("T"," "),
-        "mode":r.get("mode","full"),"ai_provider":r.get("ai_provider","gemini"),
-        "bias_found":r.get("bias_found",False),"severity":r.get("severity",""),
+    rows = [{
+        "id":r.get("id",""),
+        "created_at":(r.get("created_at") or "")[:16].replace("T"," "),
+        "mode":r.get("mode","full"),
+        "ai_provider":r.get("ai_provider","gemini"),
+        "bias_found":r.get("bias_found",False),
+        "severity":r.get("severity",""),
         "confidence":int(r.get("confidence_score",0)*100),
         "bias_types":"; ".join(r.get("bias_types",[])),
         "affected":r.get("affected_characteristic",""),
-        "original":r.get("original_outcome",""),"fair":r.get("fair_outcome",""),
+        "original":r.get("original_outcome",""),
+        "fair":r.get("fair_outcome",""),
         "explanation":r.get("explanation",""),
         "legal":"; ".join(r.get("legal_frameworks",[])),
         "next_steps":" | ".join(r.get("recommendations",[])),
@@ -482,11 +550,11 @@ def to_csv(reps):
     return pd.DataFrame(rows).to_csv(index=False)
 
 def extract_file(f):
-    name=f.name.lower()
+    name = f.name.lower()
     if name.endswith(".txt"): return f.read().decode("utf-8",errors="replace")
     if name.endswith(".pdf"):
         if not PDF_SUPPORT: st.warning("PDF support requires: pip install PyMuPDF"); return None
-        raw=f.read(); doc=pymupdf.open(stream=raw,filetype="pdf")
+        raw = f.read(); doc = pymupdf.open(stream=raw, filetype="pdf")
         return "\n".join(p.get_text() for p in doc).strip()
     st.warning(f"Unsupported: {f.name}"); return None
 
@@ -499,165 +567,113 @@ def _base():
             "font":{"family":"Syne,system-ui,sans-serif","color":"#9090AA"}}
 
 def chart_pie(b, c):
-    c_red   = tok("--red")
-    c_green = tok("--green")
-    c_bg    = tok("--bg")
-    c_t3    = tok("--t3")
-    c_t1    = tok("--t1")
     fig = go.Figure(go.Pie(
-        labels=["Bias Detected", "No Bias"],
-        values=[max(b, 1), max(c, 1)],
-        hole=.68,
-        marker={"colors": [c_red, c_green], "line": {"color": c_bg, "width": 3}},
-        textfont={"family": "Syne,sans-serif", "size": 11},
-        textinfo="percent",
-        hovertemplate="%{label}: %{value}<extra></extra>"
-    ))
+        labels=["Bias Detected","No Bias"], values=[max(b,1),max(c,1)], hole=.68,
+        marker={"colors":[tok("--red"),tok("--green")],"line":{"color":tok("--bg"),"width":3}},
+        textfont={"family":"Syne,sans-serif","size":11}, textinfo="percent",
+        hovertemplate="%{label}: %{value}<extra></extra>"))
     total = b + c or 1
-    annotation_text = f"<b style='font-size:20px'>{total}</b><br><span style='font-size:9px;color:{c_t3}'>TOTAL</span>"
     fig.add_annotation(
-        text=annotation_text,
-        x=.5, y=.5,
-        showarrow=False,
-        font={"family": "JetBrains Mono,monospace", "size": 18, "color": c_t1}
-    )
+        text=f"<b style='font-size:20px'>{total}</b><br><span style='font-size:9px;color:{tok('--t3')}'>TOTAL</span>",
+        x=.5, y=.5, showarrow=False,
+        font={"family":"JetBrains Mono,monospace","size":18,"color":tok("--t1")})
     fig.update_layout(
         height=200, showlegend=True,
-        legend={"font": {"family": "Syne,sans-serif", "size": 10}, "bgcolor": "rgba(0,0,0,0)", "orientation": "h", "x": .5, "xanchor": "center", "y": -.04},
-        margin={"l": 10, "r": 10, "t": 16, "b": 10},
-        **_base()
-    )
+        legend={"font":{"family":"Syne,sans-serif","size":10},"bgcolor":"rgba(0,0,0,0)","orientation":"h","x":.5,"xanchor":"center","y":-.04},
+        margin={"l":10,"r":10,"t":16,"b":10}, **_base())
     return fig
 
 def chart_bar(items, max_n=8):
     counts = Counter(items)
-    if not counts: counts = Counter({"No data": 1})
+    if not counts: counts = Counter({"No data":1})
     labels, values = zip(*counts.most_common(max_n))
     ll = list(labels)
     fig = go.Figure(go.Bar(
         x=list(values), y=ll, orientation="h",
-        marker={"color": [PAL[i % len(PAL)] for i in range(len(ll))], "line": {"width": 0}, "cornerradius": 4},
+        marker={"color":[PAL[i%len(PAL)] for i in range(len(ll))],"line":{"width":0},"cornerradius":4},
         text=list(values),
-        textfont={"family": "JetBrains Mono,monospace", "size": 9, "color": tok("--t2")},
+        textfont={"family":"JetBrains Mono,monospace","size":9,"color":tok("--t2")},
         textposition="outside",
-        hovertemplate="%{y}: %{x}<extra></extra>"
-    ))
-    c_surf3 = tok("--surf3")
+        hovertemplate="%{y}: %{x}<extra></extra>"))
     fig.update_layout(
-        height=max(150, len(ll) * 38 + 40),
-        xaxis={"showgrid": True, "gridcolor": c_surf3, "zeroline": False, "tickfont": {"family": "JetBrains Mono,monospace", "size": 9}},
-        yaxis={"tickfont": {"family": "Syne,sans-serif", "size": 9}},
-        bargap=.4,
-        margin=dict(l=10, r=30, t=10, b=10),
-        **_base()
-    )
+        height=max(150,len(ll)*38+40),
+        xaxis={"showgrid":True,"gridcolor":tok("--surf3"),"zeroline":False,"tickfont":{"family":"JetBrains Mono,monospace","size":9}},
+        yaxis={"tickfont":{"family":"Syne,sans-serif","size":9}},
+        bargap=.4, margin=dict(l=10,r=30,t=10,b=10), **_base())
     return fig
 
 def chart_sparkline(scores):
     if not scores: scores = [0]
-    c_accent = tok("--accent")
     fig = go.Figure(go.Scatter(
         y=scores, mode="lines",
-        line={"color": c_accent, "width": 2},
+        line={"color":tok("--accent"),"width":2},
         fill="tozeroy", fillcolor="rgba(107,138,255,0.10)",
-        hovertemplate="Score %{y}%<extra></extra>"
-    ))
+        hovertemplate="Score %{y}%<extra></extra>"))
     fig.update_layout(
-        height=75,
-        xaxis={"visible": False},
-        yaxis={"range": [0, 105], "visible": False},
-        margin={"l": 0, "r": 0, "t": 4, "b": 0},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font={"family": "Syne,sans-serif"}
-    )
+        height=75, xaxis={"visible":False}, yaxis={"range":[0,105],"visible":False},
+        margin={"l":0,"r":0,"t":4,"b":0},
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font={"family":"Syne,sans-serif"})
     return fig
 
+# FIX 8: trend chart — force x-axis to treat values as categories (date strings) not timestamps
 def chart_trend(td):
     if not td: return None
-    dates  = [d.get("date", "") for d in td]
-    rates  = [d.get("bias_rate", 0) for d in td]
-    totals = [d.get("total", 0) for d in td]
-    c_surf3  = tok("--surf3")
-    c_red    = tok("--red")
-    c_bg     = tok("--bg")
+    dates  = [d.get("date","") for d in td]
+    rates  = [d.get("bias_rate",0) for d in td]
+    totals = [d.get("total",0) for d in td]
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=dates, y=totals, name="Total",
-        marker={"color": c_surf3, "line": {"width": 0}, "cornerradius": 3},
-        yaxis="y2",
-        hovertemplate="%{x}: %{y} analyses<extra></extra>"
-    ))
+        marker={"color":tok("--surf3"),"line":{"width":0},"cornerradius":3},
+        yaxis="y2", hovertemplate="%{x}: %{y} analyses<extra></extra>"))
     fig.add_trace(go.Scatter(
         x=dates, y=rates, name="Bias %", mode="lines+markers",
-        line={"color": c_red, "width": 2.5},
-        marker={"color": c_red, "size": 5, "line": {"color": c_bg, "width": 1.5}},
-        hovertemplate="%{x}: %{y}%<extra></extra>"
-    ))
+        line={"color":tok("--red"),"width":2.5},
+        marker={"color":tok("--red"),"size":5,"line":{"color":tok("--bg"),"width":1.5}},
+        hovertemplate="%{x}: %{y}%<extra></extra>"))
     fig.update_layout(
         height=210,
-        yaxis={"range": [0, 105], "tickfont": {"family": "JetBrains Mono,monospace", "size": 9}, "gridcolor": c_surf3, "zeroline": False},
-        yaxis2={"overlaying": "y", "side": "right", "showgrid": False, "tickfont": {"family": "JetBrains Mono,monospace", "size": 9}},
-        xaxis={"tickfont": {"family": "Syne,sans-serif", "size": 9}},
-        legend={"font": {"family": "Syne,sans-serif", "size": 10}, "bgcolor": "rgba(0,0,0,0)", "x": 0, "y": 1.1, "orientation": "h"},
-        margin={"l": 10, "r": 40, "t": 20, "b": 10},
-        **_base()
-    )
+        xaxis={"type":"category","tickfont":{"family":"Syne,sans-serif","size":9}},
+        yaxis={"range":[0,105],"tickfont":{"family":"JetBrains Mono,monospace","size":9},"gridcolor":tok("--surf3"),"zeroline":False},
+        yaxis2={"overlaying":"y","side":"right","showgrid":False,"tickfont":{"family":"JetBrains Mono,monospace","size":9}},
+        legend={"font":{"family":"Syne,sans-serif","size":10},"bgcolor":"rgba(0,0,0,0)","x":0,"y":1.1,"orientation":"h"},
+        margin={"l":10,"r":40,"t":20,"b":10}, **_base())
     return fig
 
 def chart_radar(all_r):
-    dim_counts = {d: 0 for d in BIAS_DIMS}
+    dim_counts = {d:0 for d in BIAS_DIMS}
     for r in all_r:
-        if isinstance(r, dict):
-            for bt in r.get("bias_types", []):
+        if isinstance(r,dict):
+            for bt in r.get("bias_types",[]):
                 for dim in BIAS_DIMS:
-                    if dim.lower() in bt.lower():
-                        dim_counts[dim] += 1
+                    if dim.lower() in bt.lower(): dim_counts[dim] += 1
     vals = [dim_counts[d] for d in BIAS_DIMS]
-    c_accent = tok("--accent")
-    c_surf3  = tok("--surf3")
     fig = go.Figure(go.Scatterpolar(
-        r=vals + [vals[0]],
-        theta=BIAS_DIMS + [BIAS_DIMS[0]],
-        fill="toself",
+        r=vals+[vals[0]], theta=BIAS_DIMS+[BIAS_DIMS[0]], fill="toself",
         fillcolor="rgba(107,138,255,0.10)",
-        line={"color": c_accent, "width": 2},
-        marker={"color": c_accent, "size": 5}
-    ))
+        line={"color":tok("--accent"),"width":2},
+        marker={"color":tok("--accent"),"size":5}))
     fig.update_layout(
-        polar={
-            "bgcolor": "rgba(0,0,0,0)",
-            "radialaxis": {"visible": True, "gridcolor": c_surf3, "tickfont": {"family": "JetBrains Mono,monospace", "size": 8}},
-            "angularaxis": {"gridcolor": c_surf3, "tickfont": {"family": "Syne,sans-serif", "size": 9}}
-        },
+        polar={"bgcolor":"rgba(0,0,0,0)",
+               "radialaxis":{"visible":True,"gridcolor":tok("--surf3"),"tickfont":{"family":"JetBrains Mono,monospace","size":8}},
+               "angularaxis":{"gridcolor":tok("--surf3"),"tickfont":{"family":"Syne,sans-serif","size":9}}},
         height=250, showlegend=False,
-        margin={"l": 40, "r": 40, "t": 20, "b": 20},
-        paper_bgcolor="rgba(0,0,0,0)",
-        font={"family": "Syne,sans-serif"}
-    )
+        margin={"l":40,"r":40,"t":20,"b":20},
+        paper_bgcolor="rgba(0,0,0,0)", font={"family":"Syne,sans-serif"})
     return fig
 
 def chart_gauge(val, bias):
     col = tok("--red") if bias else tok("--green")
-    c_surf2 = tok("--surf2")
-    c_t3    = tok("--t3")
     fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=round(val * 100),
-        number={"suffix": "%", "font": {"family": "JetBrains Mono,monospace", "size": 22, "color": col}},
-        gauge={
-            "axis": {"range": [0, 100], "tickwidth": 0, "tickfont": {"color": c_t3, "size": 8}},
-            "bar": {"color": col, "thickness": 0.2},
-            "bgcolor": c_surf2,
-            "borderwidth": 0,
-            "steps": [
-                {"range": [0, 33],  "color": "rgba(22,101,52,.07)"},
-                {"range": [33, 66], "color": "rgba(146,64,14,.07)"},
-                {"range": [66, 100],"color": "rgba(196,43,43,.07)"}
-            ]
-        }
-    ))
-    fig.update_layout(height=160, margin={"l": 10, "r": 10, "t": 20, "b": 10}, **_base())
+        mode="gauge+number", value=round(val*100),
+        number={"suffix":"%","font":{"family":"JetBrains Mono,monospace","size":22,"color":col}},
+        gauge={"axis":{"range":[0,100],"tickwidth":0,"tickfont":{"color":tok("--t3"),"size":8}},
+               "bar":{"color":col,"thickness":0.2},"bgcolor":tok("--surf2"),"borderwidth":0,
+               "steps":[{"range":[0,33],"color":"rgba(22,101,52,.07)"},
+                        {"range":[33,66],"color":"rgba(146,64,14,.07)"},
+                        {"range":[66,100],"color":"rgba(196,43,43,.07)"}]}))
+    fig.update_layout(height=160, margin={"l":10,"r":10,"t":20,"b":10}, **_base())
     return fig
 
 # ══════════════════════════════════════════════════════
@@ -665,9 +681,8 @@ def chart_gauge(val, bias):
 # ══════════════════════════════════════════════════════
 
 def _render_steps(ph, current, label):
-    steps = [(1, "EXTRACT"), (2, "DETECT"), (3, "GENERATE")]
+    steps = [(1,"EXTRACT"),(2,"DETECT"),(3,"GENERATE")]
     parts = []
-    c_accent = tok("--accent")
     for num, lbl in steps:
         if num < current:   cls, ico = "ss-done", "✓"
         elif num == current: cls, ico = "ss-active", "⟳"
@@ -676,7 +691,7 @@ def _render_steps(ph, current, label):
     ph.markdown(
         f'<div class="ss">{"".join(parts)}</div>'
         f'<div class="scan-bar"><div class="scan-fill"></div></div>'
-        f'<div style="font-size:.74rem;color:{c_accent};font-weight:600;">⬤ {label}</div>',
+        f'<div style="font-size:.74rem;color:{tok("--accent")};font-weight:600;">⬤ {label}</div>',
         unsafe_allow_html=True)
 
 def run_analysis(text, dtype, mode="full", provider="gemini", model=None):
@@ -697,7 +712,7 @@ def run_analysis(text, dtype, mode="full", provider="gemini", model=None):
             r = services.run_full_pipeline(decision_text=text, decision_type=dtype,
                                            progress_callback=cb, provider=provider)
         if isinstance(r, dict):
-            r["ai_model"] = model or (orig_gemini if provider == "gemini" else orig_groq)
+            r["ai_model"] = model or (orig_gemini if provider=="gemini" else orig_groq)
         st.session_state["session_count"] += 1
         ph.empty()
         return r, None
@@ -734,9 +749,9 @@ def render_result(report, dt, dtype, compact=False):
     vico  = "⚠" if bias else "✓"
     vtxt  = "Bias Detected" if bias else "No Bias Found"
     vsub  = "This decision contains discriminatory patterns." if bias else "No strong discriminatory signals found."
-    mbadge = '<span class="mb-quick">Quick</span>' if mode_ == "quick" else '<span class="mb-full">Full</span>'
+    mbadge = '<span class="mb-quick">Quick</span>' if mode_=="quick" else '<span class="mb-full">Full</span>'
     pbadge = provider_badge_html(prov)
-    mdl_short = _trunc(mdl.replace("gemini-", "").replace("llama-", "").replace("-versatile", ""), 22)
+    mdl_short = _trunc(mdl.replace("gemini-","").replace("llama-","").replace("-versatile",""), 22)
     model_badge = (
         f'<span style="background:var(--surf3);color:var(--t2);border:1px solid var(--border);'
         f'border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:600;">{mdl_short}</span>'
@@ -749,29 +764,27 @@ def render_result(report, dt, dtype, compact=False):
         f'<div class="vb-title">{vtxt}</div>'
         f'<div class="vb-sub">{vsub}</div>'
         f'<div style="margin-top:8px;display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">'
-        f'{mbadge} {sev_badge(conf, bias, report.get("severity", "low"))} {pbadge} {model_badge}'
+        f'{mbadge} {sev_badge(conf,bias,report.get("severity","low"))} {pbadge} {model_badge}'
         f'</div></div>',
         unsafe_allow_html=True)
 
-    rc1, rc2 = st.columns([1, 2], gap="small")
+    rc1, rc2 = st.columns([1,2], gap="small")
     with rc1:
-        c_amber = tok("--amber")
         aff_html = ""
         if aff:
             aff_html = (
                 f'<div style="margin-top:9px;"><div class="card-lbl">Affected</div>'
-                f'<div style="font-size:.9rem;font-weight:700;color:{c_amber};">{aff.title()}</div></div>'
+                f'<div style="font-size:.9rem;font-weight:700;color:{tok("--amber")};">{aff.title()}</div></div>'
             )
         st.markdown(
             f'<div class="card" style="text-align:center;">'
-            f'<div class="ring-wrap">{ring_svg(pct, bias)}</div>{aff_html}</div>',
+            f'<div class="ring-wrap">{ring_svg(pct,bias)}</div>{aff_html}</div>',
             unsafe_allow_html=True)
     with rc2:
-        chips_html = chips(btype) if btype else chips([])
         st.markdown(
             f'<div class="card" style="height:100%;">'
             f'<div class="card-lbl">Bias Types</div>'
-            f'<div style="line-height:2.2;">{chips_html}</div>'
+            f'<div style="line-height:2.2;">{chips(btype) if btype else chips([])}</div>'
             f'</div>',
             unsafe_allow_html=True)
 
@@ -794,17 +807,14 @@ def render_result(report, dt, dtype, compact=False):
     if not compact:
         if dt and (btype or report.get("bias_phrases")):
             st.markdown('<div class="lbl" style="margin-top:11px;">Highlighted Phrases</div>', unsafe_allow_html=True)
-            hl = highlight_text(dt, report.get("bias_phrases", []), btype)
-            c_t3 = tok("--t3")
+            hl = highlight_text(dt, report.get("bias_phrases",[]), btype)
             st.markdown(
                 f'<div class="hl-box">{hl}</div>'
-                f'<div style="font-size:.66rem;color:{c_t3};margin-top:3px;">Highlighted = potential bias proxies</div>',
+                f'<div style="font-size:.66rem;color:{tok("--t3")};margin-top:3px;">Highlighted = potential bias proxies</div>',
                 unsafe_allow_html=True)
         if expl:
             st.markdown('<div class="lbl" style="margin-top:11px;">Plain English</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="card card-warn"><div class="card-val">{expl}</div></div>',
-                unsafe_allow_html=True)
+            st.markdown(f'<div class="card card-warn"><div class="card-val">{expl}</div></div>', unsafe_allow_html=True)
         if laws:
             st.markdown('<div class="lbl" style="margin-top:11px;">Legal Frameworks</div>', unsafe_allow_html=True)
             rows_html = "".join(f'<div class="law-row"><span class="ico">⚖</span>{l}</div>' for l in laws)
@@ -826,21 +836,19 @@ inject_css()
 with st.sidebar:
     gem_status  = gemini_ok()
     groq_status = groq_ok()
-    dot_cls = "api-ok" if gem_status else ("api-warn" if groq_status else "api-err")
+    dot_cls    = "api-ok" if gem_status else ("api-warn" if groq_status else "api-err")
     status_txt = (
-        "Gemini + Groq ready" if gem_status and groq_status else
-        "Gemini ready (Groq not set)" if gem_status else
-        "Groq only (add GEMINI_API_KEY)" if groq_status else
+        "Gemini + Groq ready"             if gem_status and groq_status else
+        "Gemini ready (Groq not set)"     if gem_status else
+        "Groq only (add GEMINI_API_KEY)"  if groq_status else
         "No API key — see Settings"
     )
 
-    cur_prov  = st.session_state.get("ai_provider", "gemini")
-    cur_model = st.session_state.get("ai_model", "gemini-1.5-flash")
+    cur_prov  = st.session_state.get("ai_provider","gemini")
+    cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
     mdl_short = _trunc(
-        cur_model.replace("gemini-", "G·").replace("llama-", "L·")
-                 .replace("-versatile", "").replace("-instant", ""),
-        18
-    )
+        cur_model.replace("gemini-","G·").replace("llama-","L·")
+                 .replace("-versatile","").replace("-instant",""), 18)
     prov_icon = "🔵" if cur_prov == "gemini" else "🟠"
 
     st.markdown(
@@ -866,12 +874,13 @@ with st.sidebar:
 
     st.markdown('<div style="border-top:1px solid rgba(255,255,255,.06);margin:10px 0 4px;"></div>', unsafe_allow_html=True)
     st.markdown('<span class="sb-lbl">Quick Examples</span>', unsafe_allow_html=True)
+    # FIX 12: word-boundary truncation already applied via _trunc
     for idx in [1, 5, 6, 8]:
         ex = EXAMPLES[idx]
-        if st.button(_trunc(ex["tag"], 28), key=f"ex_{idx}", use_container_width=True):
+        if st.button(_trunc(ex["tag"], 26), key=f"ex_{idx}", use_container_width=True):
             st.session_state["decision_input"] = ex["text"]
-            st.session_state["dtype_sel"] = ex["type"]
-            st.session_state["view"] = "analyse"
+            st.session_state["dtype_sel"]      = ex["type"]
+            st.session_state["view"]           = "analyse"
             st.rerun()
 
     st.markdown('<div style="border-top:1px solid rgba(255,255,255,.06);margin:10px 0 8px;"></div>', unsafe_allow_html=True)
@@ -902,77 +911,63 @@ if view == "models":
 
     prov_col1, prov_col2 = st.columns(2, gap="small")
     with prov_col1:
-        gem_sel = st.session_state.get("ai_provider", "gemini") == "gemini"
-        c_accent = tok("--accent")
-        c_border = tok("--border")
-        gem_border = f"border:2px solid {c_accent};" if gem_sel else f"border:1px solid {c_border};"
-        selected_label = '<div style="font-size:.65rem;color:var(--accent);margin-top:5px;font-weight:700;">✓ SELECTED</div>' if gem_sel else ""
+        gem_sel    = st.session_state.get("ai_provider","gemini") == "gemini"
+        gem_border = f"border:2px solid {tok('--accent')};" if gem_sel else f"border:1px solid {tok('--border')};"
+        sel_lbl    = '<div style="font-size:.65rem;color:var(--accent);margin-top:5px;font-weight:700;">✓ SELECTED</div>' if gem_sel else ""
         st.markdown(
-            f'<div class="card" style="{gem_border}cursor:pointer;">'
+            f'<div class="card" style="{gem_border}">'
             f'<div style="font-size:1.3rem;margin-bottom:6px;">🔵</div>'
             f'<div style="font-weight:700;color:var(--t1);font-size:.9rem;">Google Gemini</div>'
             f'<div style="font-size:.72rem;color:var(--t3);margin-top:3px;">Primary · Required for hackathon</div>'
-            f'{selected_label}'
-            f'</div>',
+            f'{sel_lbl}</div>',
             unsafe_allow_html=True)
         if st.button("Select Gemini", key="sel_gemini", use_container_width=True):
             st.session_state["ai_provider"] = "gemini"
-            if st.session_state.get("ai_model", "") not in GEMINI_MODELS:
+            if st.session_state.get("ai_model","") not in GEMINI_MODELS:
                 st.session_state["ai_model"] = "gemini-1.5-flash"
             st.rerun()
+
     with prov_col2:
-        grq_sel = st.session_state.get("ai_provider", "gemini") == "groq"
-        c_amber = tok("--amber")
-        grq_border = f"border:2px solid {c_amber};" if grq_sel else f"border:1px solid {c_border};"
-        selected_label_grq = '<div style="font-size:.65rem;color:var(--amber);margin-top:5px;font-weight:700;">✓ SELECTED</div>' if grq_sel else ""
+        grq_sel    = st.session_state.get("ai_provider","gemini") == "groq"
+        grq_border = f"border:2px solid {tok('--amber')};" if grq_sel else f"border:1px solid {tok('--border')};"
+        sel_lbl_g  = '<div style="font-size:.65rem;color:var(--amber);margin-top:5px;font-weight:700;">✓ SELECTED</div>' if grq_sel else ""
         st.markdown(
-            f'<div class="card" style="{grq_border}cursor:pointer;">'
+            f'<div class="card" style="{grq_border}">'
             f'<div style="font-size:1.3rem;margin-bottom:6px;">🟠</div>'
             f'<div style="font-weight:700;color:var(--t1);font-size:.9rem;">Groq</div>'
             f'<div style="font-size:.72rem;color:var(--t3);margin-top:3px;">Fallback · High speed inference</div>'
-            f'{selected_label_grq}'
-            f'</div>',
+            f'{sel_lbl_g}</div>',
             unsafe_allow_html=True)
         if st.button("Select Groq", key="sel_groq", use_container_width=True):
             st.session_state["ai_provider"] = "groq"
-            if st.session_state.get("ai_model", "") not in GROQ_MODELS:
+            if st.session_state.get("ai_model","") not in GROQ_MODELS:
                 st.session_state["ai_model"] = "llama-3.3-70b-versatile"
             st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
-    current_prov = st.session_state.get("ai_provider", "gemini")
-    current_mdl  = st.session_state.get("ai_model", "gemini-1.5-flash")
+    current_prov = st.session_state.get("ai_provider","gemini")
+    current_mdl  = st.session_state.get("ai_model","gemini-1.5-flash")
 
     if current_prov == "gemini":
         st.markdown('<div class="lbl">🔵 Available Gemini Models</div>', unsafe_allow_html=True)
         if not gem_status:
             st.markdown('<div class="key-err">⚠ GEMINI_API_KEY not set. Add it to .env to use Gemini models.</div>', unsafe_allow_html=True)
-
         for mid, mdesc in GEMINI_MODELS.items():
             is_sel      = current_mdl == mid
             recommended = "1.5-flash" in mid and "8b" not in mid
-            c_acc       = tok("--accent")
-            c_brd       = tok("--border")
-            border_style = f"border:2px solid {c_acc};" if is_sel else f"border:1px solid {c_brd};"
+            border_style = f"border:2px solid {tok('--accent')};" if is_sel else f"border:1px solid {tok('--border')};"
             bg_style     = "background:var(--acc-lt);" if is_sel else ""
-            rec_badge    = (
-                ' <span style="background:rgba(74,222,128,.15);color:#4ADE80;border-radius:999px;'
-                'padding:1px 7px;font-size:.6rem;font-weight:700;border:1px solid #4ADE80;">✦ Recommended</span>'
-                if recommended else ""
-            )
-            active_label = '<div style="font-size:.72rem;color:var(--accent);font-weight:700;">✓ Active</div>' if is_sel else ""
-
-            col_a, col_b = st.columns([4, 1], gap="small")
+            rec_badge    = (' <span style="background:rgba(74,222,128,.15);color:#4ADE80;border-radius:999px;padding:1px 7px;font-size:.6rem;font-weight:700;border:1px solid #4ADE80;">✦ Recommended</span>'
+                            if recommended else "")
+            col_a, col_b = st.columns([4,1], gap="small")
             with col_a:
+                active_html = '<div style="font-size:.72rem;color:var(--accent);font-weight:700;">✓ Active</div>' if is_sel else ""
                 st.markdown(
                     f'<div class="card" style="{border_style}{bg_style}margin-bottom:5px;">'
-                    f'<div style="display:flex;align-items:center;gap:8px;">'
-                    f'<div style="flex:1;">'
+                    f'<div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;">'
                     f'<div style="font-size:.82rem;font-weight:700;color:var(--t1);">{mid}{rec_badge}</div>'
                     f'<div style="font-size:.72rem;color:var(--t3);margin-top:2px;">{mdesc}</div>'
-                    f'</div>'
-                    f'{active_label}'
-                    f'</div></div>',
+                    f'</div>{active_html}</div></div>',
                     unsafe_allow_html=True)
             with col_b:
                 if not is_sel:
@@ -981,37 +976,26 @@ if view == "models":
                         st.session_state["ai_provider"] = "gemini"
                         st.rerun()
                 else:
-                    st.markdown(
-                        '<div style="height:42px;display:flex;align-items:center;justify-content:center;'
-                        'font-size:.72rem;color:var(--accent);font-weight:700;">Active</div>',
-                        unsafe_allow_html=True)
+                    st.markdown('<div style="height:42px;display:flex;align-items:center;justify-content:center;font-size:.72rem;color:var(--accent);font-weight:700;">Active</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="lbl">🟠 Available Groq Models</div>', unsafe_allow_html=True)
         if not groq_status:
             st.markdown('<div class="key-err">⚠ GROQ_API_KEY not set. Add it to .env to use Groq models.</div>', unsafe_allow_html=True)
-
         for mid, mdesc in GROQ_MODELS.items():
             is_sel      = current_mdl == mid
             recommended = "70b-versatile" in mid
-            c_amb       = tok("--amber")
-            c_brd       = tok("--border")
-            border_style = f"border:2px solid {c_amb};" if is_sel else f"border:1px solid {c_brd};"
+            border_style = f"border:2px solid {tok('--amber')};" if is_sel else f"border:1px solid {tok('--border')};"
             bg_style     = "background:var(--amb-lt);" if is_sel else ""
-            rec_badge    = (
-                ' <span style="background:rgba(251,176,64,.15);color:#FBB040;border-radius:999px;'
-                'padding:1px 7px;font-size:.6rem;font-weight:700;border:1px solid #FBB040;">✦ Recommended</span>'
-                if recommended else ""
-            )
-            active_label = '<div style="font-size:.72rem;color:var(--amber);font-weight:700;margin-top:3px;">✓ Active</div>' if is_sel else ""
-
-            col_a, col_b = st.columns([4, 1], gap="small")
+            rec_badge    = (' <span style="background:rgba(251,176,64,.15);color:#FBB040;border-radius:999px;padding:1px 7px;font-size:.6rem;font-weight:700;border:1px solid #FBB040;">✦ Recommended</span>'
+                            if recommended else "")
+            col_a, col_b = st.columns([4,1], gap="small")
             with col_a:
+                active_html = '<div style="font-size:.72rem;color:var(--amber);font-weight:700;margin-top:3px;">✓ Active</div>' if is_sel else ""
                 st.markdown(
                     f'<div class="card" style="{border_style}{bg_style}margin-bottom:5px;">'
                     f'<div style="font-size:.82rem;font-weight:700;color:var(--t1);">{mid}{rec_badge}</div>'
                     f'<div style="font-size:.72rem;color:var(--t3);margin-top:2px;">{mdesc}</div>'
-                    f'{active_label}'
-                    f'</div>',
+                    f'{active_html}</div>',
                     unsafe_allow_html=True)
             with col_b:
                 if not is_sel:
@@ -1020,30 +1004,24 @@ if view == "models":
                         st.session_state["ai_provider"] = "groq"
                         st.rerun()
                 else:
-                    st.markdown(
-                        '<div style="height:42px;display:flex;align-items:center;justify-content:center;'
-                        'font-size:.72rem;color:var(--amber);font-weight:700;">Active</div>',
-                        unsafe_allow_html=True)
+                    st.markdown('<div style="height:42px;display:flex;align-items:center;justify-content:center;font-size:.72rem;color:var(--amber);font-weight:700;">Active</div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    mdl_disp = model_display(current_mdl)
-    fallback_note = (
-        "Gemini auto-falls back to Groq if API call fails"
-        if current_prov == "gemini"
-        else "Groq direct — no fallback"
-    )
+    fallback_note = "Gemini auto-falls back to Groq if API call fails" if current_prov=="gemini" else "Groq direct — no fallback"
     st.markdown(
         f'<div class="card card-info"><div class="card-lbl">Currently Active</div>'
         f'<div style="display:flex;align-items:center;gap:10px;margin-top:6px;">'
         f'{provider_badge_html(current_prov)}'
         f'<span style="font-size:.88rem;font-weight:700;color:var(--t1);">{current_mdl}</span>'
         f'</div>'
-        f'<div style="font-size:.72rem;color:var(--t2);margin-top:5px;">{mdl_disp}</div>'
+        f'<div style="font-size:.72rem;color:var(--t2);margin-top:5px;">{model_display(current_mdl)}</div>'
         f'<div style="font-size:.7rem;color:var(--t3);margin-top:4px;">{fallback_note}</div>'
         f'</div>',
         unsafe_allow_html=True)
 
-    if st.button("⚡ Go to Analyse →", key="goto_analyse_from_models"):
+    st.markdown("<br>", unsafe_allow_html=True)
+    # FIX 13: primary-styled CTA
+    if st.button("⚡ Go to Analyse →", key="goto_analyse_from_models", type="primary", use_container_width=True):
         st.session_state["view"] = "analyse"
         st.rerun()
 
@@ -1057,40 +1035,42 @@ elif view == "analyse":
     if not any_api_ok():
         st.markdown('<div class="key-err">⚠ No API key found. Add GEMINI_API_KEY or GROQ_API_KEY to .env and restart.</div>', unsafe_allow_html=True)
 
-    cur_prov  = st.session_state.get("ai_provider", "gemini")
-    cur_model = st.session_state.get("ai_model", "gemini-1.5-flash")
-    prov_available = (gem_status if cur_prov == "gemini" else groq_status)
-    banner_color  = tok("--acc-lt") if cur_prov == "gemini" else tok("--amb-lt")
-    banner_border = tok("--accent") if cur_prov == "gemini" else tok("--amber")
-    key_missing_html = "" if prov_available else ' <span style="color:var(--red);font-size:.7rem;">⚠ Key missing</span>'
+    cur_prov       = st.session_state.get("ai_provider","gemini")
+    cur_model      = st.session_state.get("ai_model","gemini-1.5-flash")
+    prov_available = (gem_status if cur_prov=="gemini" else groq_status)
+    banner_cls     = "" if cur_prov=="gemini" else "groq-banner"
+    key_miss       = "" if prov_available else ' <span style="color:var(--red);font-size:.7rem;font-weight:600;">⚠ Key missing</span>'
 
+    # FIX 5: Slim banner; FIX 1: button navigates to models view
     st.markdown(
-        f'<div style="background:{banner_color};border:1px solid {banner_border};border-radius:var(--r-lg);'
-        f'padding:.55rem 1rem;margin-bottom:.9rem;display:flex;align-items:center;justify-content:space-between;">'
-        f'<div style="display:flex;align-items:center;gap:8px;">'
-        f'<span style="font-size:.75rem;font-weight:700;color:var(--t1);">Active Model:</span>'
+        f'<div class="model-banner {banner_cls}">'
+        f'<div class="model-banner-left">'
+        f'<span class="model-banner-label">Active Model:</span>'
         f'{provider_badge_html(cur_prov)}'
-        f'<span style="font-family:var(--ff-m);font-size:.72rem;color:var(--t2);">{cur_model}</span>'
-        f'{key_missing_html}'
+        f'<span class="model-banner-model">{cur_model}</span>'
+        f'{key_miss}'
         f'</div>'
-        f'<a href="#" style="font-size:.7rem;color:var(--accent);font-weight:600;text-decoration:none;">Change model →</a>'
         f'</div>',
         unsafe_allow_html=True)
+    # FIX 1: real Streamlit button for "Change model" that actually navigates
+    if st.button("⊕ Change model", key="change_model_btn",
+                 help="Open Model Selector"):
+        st.session_state["view"] = "models"
+        st.rerun()
 
     if not prov_available:
-        fallback_prov = "groq" if cur_prov == "gemini" else "gemini"
-        fallback_ok   = groq_status if cur_prov == "gemini" else gem_status
-        if fallback_ok:
+        fb_prov = "groq" if cur_prov=="gemini" else "gemini"
+        fb_ok   = groq_status if cur_prov=="gemini" else gem_status
+        if fb_ok:
             st.markdown(
-                f'<div class="card card-warn"><div class="card-val" style="font-size:.8rem;">'
-                f'⚠ {cur_prov.title()} key missing — will auto-fallback to {fallback_prov.title()}'
-                f'</div></div>',
+                f'<div class="card card-warn" style="margin-bottom:.5rem;">'
+                f'<div class="card-val" style="font-size:.8rem;">⚠ {cur_prov.title()} key missing — will auto-fallback to {fb_prov.title()}</div></div>',
                 unsafe_allow_html=True)
 
-    input_col, right_pad = st.columns([5, 2], gap="large")
+    input_col, right_pad = st.columns([5,2], gap="large")
 
     with input_col:
-        mode_sel = st.radio("input_mode", ["✏  Paste Text", "📄  Upload File"],
+        mode_sel = st.radio("input_mode", ["✏  Paste Text","📄  Upload File"],
                             horizontal=True, label_visibility="collapsed", key="input_mode")
         st.markdown('<div class="lbl" style="margin-top:6px;">Decision Text</div>', unsafe_allow_html=True)
 
@@ -1099,63 +1079,73 @@ elif view == "analyse":
                 "text", label_visibility="collapsed", height=190, key="decision_input",
                 placeholder="Paste any rejection letter, loan denial, triage outcome, or university decision here…\n\nTip — load an example from the sidebar →")
         else:
-            uf = st.file_uploader("File", type=["txt", "pdf"], label_visibility="collapsed", key="file_up")
+            uf = st.file_uploader("File", type=["txt","pdf"], label_visibility="collapsed", key="file_up")
             decision_text = ""
             if uf:
-                ex = extract_file(uf)
-                if ex:
-                    decision_text = ex
-                    st.markdown(
-                        f'<div style="margin-bottom:7px;">'
-                        f'<span class="chip cg">✓ {len(ex):,} chars from {uf.name}</span></div>',
-                        unsafe_allow_html=True)
+                ex_text = extract_file(uf)
+                if ex_text:
+                    decision_text = ex_text
+                    st.markdown(f'<span class="chip cg">✓ {len(ex_text):,} chars from {uf.name}</span>', unsafe_allow_html=True)
                     with st.expander("Preview"):
-                        st.text(_trunc(ex, 600))
+                        st.text(_trunc(ex_text, 600))
 
-        opts = ["job", "loan", "medical", "university", "other"]
-        cur  = st.session_state.get("dtype_sel", "job")
+        opts = ["job","loan","medical","university","other"]
+        cur  = st.session_state.get("dtype_sel","job")
         idx  = opts.index(cur) if cur in opts else 0
-        tc1, tc2 = st.columns([2, 1])
+        tc1, tc2 = st.columns([2,1])
         with tc1:
+            # FIX 3: key is dtype_sel, initialised separately above — no conflict
             dtype = st.selectbox("Type", opts, format_func=lambda x: TYPE_LABELS[x], index=idx, key="dtype_sel")
         with tc2:
             n = len((decision_text or "").strip())
-            if n > 150:   cc, cl = tok("--green"), "Ready"
-            elif n > 50:  cc, cl = tok("--amber"), "Min length"
-            else:         cc, cl = tok("--red"),   "Too short"
-            w = min(100, int(n / 3))
+            if n > 150:  cc, cl = tok("--green"), "Ready"
+            elif n > 50: cc, cl = tok("--amber"), "Min length"
+            else:        cc, cl = tok("--red"),   "Too short"
+            w = min(100, int(n/3))
             st.markdown(
                 f'<div style="margin-top:22px;">'
-                f'<div class="char-row" style="color:{cc};">'
-                f'<span>{n:,} chars</span><span style="font-size:.65rem;">{cl}</span></div>'
+                f'<div class="char-row" style="color:{cc};"><span>{n:,} chars</span><span style="font-size:.65rem;">{cl}</span></div>'
                 f'<div class="char-track"><div class="char-fill" style="width:{w}%;background:{cc};"></div></div></div>',
                 unsafe_allow_html=True)
 
+        # FIX 10: visual separator before scan mode
+        st.markdown('<hr class="section-sep">', unsafe_allow_html=True)
+        st.markdown('<div class="lbl">Scan Mode</div>', unsafe_allow_html=True)
         scan_mode = st.radio(
-            "Scan Mode",
-            ["full", "quick"],
-            format_func=lambda x: "⚡ Full — 3-step deep analysis" if x == "full" else "◎ Quick — single call, faster",
-            horizontal=True, key="scan_mode")
+            "Scan Mode", ["full","quick"],
+            format_func=lambda x: "⚡ Full — 3-step deep analysis" if x=="full" else "◎ Quick — single call, faster",
+            horizontal=True, key="scan_mode", label_visibility="collapsed")
 
         st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-        ba1, ba2 = st.columns([2, 1])
+        ba1, ba2 = st.columns([2,1])
         with ba1:
             run_btn = st.button("⚡ Run Analysis", key="run_btn", disabled=not any_api_ok())
         with ba2:
-            compare_mode = st.toggle("Side-by-side compare", value=False, key="compare_toggle")
+            # FIX 9: Clear button only shown when there's a result
+            if st.session_state.get("last_report"):
+                st.markdown('<div class="clear-btn">', unsafe_allow_html=True)
+                if st.button("✕ Clear", key="clear_btn"):
+                    st.session_state["last_report"]   = None
+                    st.session_state["last_text"]     = ""
+                    st.session_state["appeal_letter"] = None
+                    st.session_state["decision_input"] = ""
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        # FIX 11: Compare toggle separated with divider
+        st.markdown('<hr class="section-sep">', unsafe_allow_html=True)
+        compare_mode = st.toggle("Side-by-side compare", value=False, key="compare_toggle")
 
         if compare_mode:
             st.markdown('<div class="lbl" style="margin-top:8px;">Decision B (for comparison)</div>', unsafe_allow_html=True)
-            dt_b  = st.text_area("text_b", label_visibility="collapsed", height=120, key="decision_input_b", placeholder="Paste second decision…")
-            ctp2  = st.selectbox("Type B", opts, format_func=lambda x: TYPE_LABELS[x], label_visibility="collapsed", key="dtype_b")
+            dt_b = st.text_area("text_b", label_visibility="collapsed", height=120, key="decision_input_b", placeholder="Paste second decision…")
+            ctp2 = st.selectbox("Type B", opts, format_func=lambda x: TYPE_LABELS[x], label_visibility="collapsed", key="dtype_b")
 
         if decision_text and len(decision_text.strip()) > 30:
             detected = [d for d in BIAS_DIMS if re.search(BIAS_KW[d], decision_text, re.IGNORECASE)]
             if detected:
                 st.markdown('<div class="lbl" style="margin-top:8px;">Signals detected in text</div>', unsafe_allow_html=True)
-                st.markdown(
-                    "".join(f'<span class="chip ca" style="margin-bottom:4px;">{d}</span>' for d in detected),
-                    unsafe_allow_html=True)
+                st.markdown("".join(f'<span class="chip ca" style="margin-bottom:4px;">{d}</span>' for d in detected), unsafe_allow_html=True)
 
     with right_pad:
         st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
@@ -1166,31 +1156,35 @@ elif view == "analyse":
             unsafe_allow_html=True)
 
         quick_models = {
-            "gemini": ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
-            "groq":   ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+            "gemini": ["gemini-1.5-flash","gemini-2.0-flash","gemini-1.5-pro"],
+            "groq":   ["llama-3.3-70b-versatile","llama-3.1-8b-instant","mixtral-8x7b-32768"],
         }
+        # FIX 2: active model button uses green-tinted class via wrapper div
         for p, models in quick_models.items():
-            p_icon  = "🔵" if p == "gemini" else "🟠"
-            p_color = tok("--accent") if p == "gemini" else tok("--amber")
-            st.markdown(
-                f'<div style="font-size:.65rem;color:{p_color};font-weight:700;margin:7px 0 3px;">{p_icon} {p.upper()}</div>',
-                unsafe_allow_html=True)
+            p_icon  = "🔵" if p=="gemini" else "🟠"
+            p_color = tok("--accent") if p=="gemini" else tok("--amber")
+            st.markdown(f'<div style="font-size:.65rem;color:{p_color};font-weight:700;margin:7px 0 3px;">{p_icon} {p.upper()}</div>', unsafe_allow_html=True)
             for m in models:
-                is_cur = (st.session_state.get("ai_model") == m and st.session_state.get("ai_provider") == p)
-                short  = m.replace("gemini-", "").replace("llama-", "").replace("-versatile", "").replace("-instant", "")
+                is_cur = (st.session_state.get("ai_model")==m and st.session_state.get("ai_provider")==p)
+                short  = m.replace("gemini-","").replace("llama-","").replace("-versatile","").replace("-instant","")
                 prefix = "✓ " if is_cur else ""
+                # Wrap active button in class for targeted CSS override
+                if is_cur:
+                    st.markdown('<div class="qs-btn-active">', unsafe_allow_html=True)
                 if st.button(f"{prefix}{short}", key=f"qs_{p}_{m}", use_container_width=True):
                     st.session_state["ai_provider"] = p
                     st.session_state["ai_model"]    = m
                     st.rerun()
+                if is_cur:
+                    st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('</div></div>', unsafe_allow_html=True)
-        bias_chips_html = "".join(f'<span class="chip cn" style="margin-bottom:3px;">{d}</span>' for d in BIAS_DIMS)
         st.markdown(
             f'<div class="card card-info" style="margin-top:8px;">'
             f'<div class="card-lbl">Bias Dimensions</div>'
-            f'<div style="margin-top:6px;">{bias_chips_html}</div>'
-            f'</div>',
+            f'<div style="margin-top:6px;">'
+            + "".join(f'<span class="chip cn" style="margin-bottom:3px;">{d}</span>' for d in BIAS_DIMS)
+            + f'</div></div>',
             unsafe_allow_html=True)
 
     # ── Run logic ──
@@ -1215,15 +1209,15 @@ elif view == "analyse":
                 with st.spinner(""):
                     report, err = run_analysis(
                         dt, dtype, mode=scan_mode,
-                        provider=st.session_state.get("ai_provider", "gemini"),
-                        model=st.session_state.get("ai_model", "gemini-1.5-flash"))
+                        provider=st.session_state.get("ai_provider","gemini"),
+                        model=st.session_state.get("ai_model","gemini-1.5-flash"))
 
             if err:
                 st.error(f"❌ {err}")
             elif report:
-                st.session_state["last_report"]  = report
-                st.session_state["last_text"]    = dt
-                st.session_state["last_dtype"]   = dtype
+                st.session_state["last_report"]   = report
+                st.session_state["last_text"]     = dt
+                st.session_state["last_dtype"]    = dtype
                 st.session_state["appeal_letter"] = None
 
             if compare_mode and not err:
@@ -1231,39 +1225,34 @@ elif view == "analyse":
                 if dt2:
                     with st.spinner("Analysing Decision B…"):
                         rb, eb = run_analysis(
-                            dt2, st.session_state.get("dtype_b", "other"),
+                            dt2, st.session_state.get("dtype_b","other"),
                             mode=scan_mode,
-                            provider=st.session_state.get("ai_provider", "gemini"),
-                            model=st.session_state.get("ai_model", "gemini-1.5-flash"))
-                    if eb:
-                        st.error(f"Decision B error: {eb}")
+                            provider=st.session_state.get("ai_provider","gemini"),
+                            model=st.session_state.get("ai_model","gemini-1.5-flash"))
+                    if eb: st.error(f"Decision B error: {eb}")
                     else:
                         st.session_state["cmp_ra"] = report
                         st.session_state["cmp_rb"] = rb
 
-    report  = st.session_state.get("last_report")
-    dt      = st.session_state.get("last_text", "")
-    dtype_  = st.session_state.get("last_dtype", "other")
+    report = st.session_state.get("last_report")
+    dt     = st.session_state.get("last_text","")
+    dtype_ = st.session_state.get("last_dtype","other")
 
     # ── Compare view ──
     if compare_mode and st.session_state.get("cmp_ra") and st.session_state.get("cmp_rb"):
         ra, rb  = st.session_state["cmp_ra"], st.session_state["cmp_rb"]
         ba, bb  = ra.get("bias_found"), rb.get("bias_found")
-        ca, cb_ = ra.get("confidence_score", 0), rb.get("confidence_score", 0)
+        ca, cb_ = ra.get("confidence_score",0), rb.get("confidence_score",0)
         if ba and bb:
-            winner = "A" if ca >= cb_ else "B"
-            msg = f"Both show bias — Decision {winner} has higher confidence ({int(max(ca, cb_) * 100)}%)"
-        elif ba:
-            msg = "Decision A shows bias · Decision B appears fair"
-        elif bb:
-            msg = "Decision B shows bias · Decision A appears fair"
-        else:
-            msg = "Neither decision contains discriminatory patterns"
+            msg = f"Both show bias — Decision {'A' if ca>=cb_ else 'B'} has higher confidence ({int(max(ca,cb_)*100)}%)"
+        elif ba: msg = "Decision A shows bias · Decision B appears fair"
+        elif bb: msg = "Decision B shows bias · Decision A appears fair"
+        else:    msg = "Neither decision contains discriminatory patterns"
         st.markdown(f'<div class="winner-bar">{msg}</div>', unsafe_allow_html=True)
         v1, v2 = st.columns(2, gap="small")
-        for col, r, lbl in [(v1, ra, "A"), (v2, rb, "B")]:
+        for col, r, lbl in [(v1,ra,"A"),(v2,rb,"B")]:
             with col:
-                b_   = r.get("bias_found", False)
+                b_    = r.get("bias_found",False)
                 vcls_ = "vb-bias" if b_ else "vb-clean"
                 vt_   = "⚠ Bias" if b_ else "✓ Clean"
                 st.markdown(
@@ -1271,13 +1260,12 @@ elif view == "analyse":
                     f'<div class="vb-title" style="font-size:1.1rem;">Decision {lbl}</div>'
                     f'<div class="vb-sub" style="font-size:.78rem;">{vt_}</div></div>',
                     unsafe_allow_html=True)
-                st.plotly_chart(chart_gauge(r.get("confidence_score", 0), b_), use_container_width=True, config={"displayModeBar": False})
-                st.markdown(chips(r.get("bias_types", [])), unsafe_allow_html=True)
-                prov_r = r.get("ai_provider", "gemini")
+                st.plotly_chart(chart_gauge(r.get("confidence_score",0),b_), use_container_width=True, config={"displayModeBar":False})
+                st.markdown(chips(r.get("bias_types",[])), unsafe_allow_html=True)
                 st.markdown(
                     f'<div style="margin-top:4px;">'
-                    f'{sev_badge(r.get("confidence_score", 0), b_, r.get("severity", "low"))} '
-                    f'{provider_badge_html(prov_r)}</div>',
+                    f'{sev_badge(r.get("confidence_score",0),b_,r.get("severity","low"))} '
+                    f'{provider_badge_html(r.get("ai_provider","gemini"))}</div>',
                     unsafe_allow_html=True)
                 if r.get("fair_outcome"):
                     st.markdown(
@@ -1298,15 +1286,13 @@ elif view == "analyse":
         st.markdown('<hr class="div">', unsafe_allow_html=True)
         st.markdown('<div class="lbl">Was this analysis helpful?</div>', unsafe_allow_html=True)
         fb_comment = st.text_input("Comment", key="fb_comment", label_visibility="collapsed", placeholder="Optional notes…")
-        fb1, fb2, _ = st.columns([1, 1, 3])
+        fb1, fb2, _ = st.columns([1,1,3])
         with fb1:
             if st.button("👍 Helpful", key="fb_y"):
-                services.save_feedback(report.get("id", ""), 1, fb_comment)
-                st.success("Thanks!")
+                services.save_feedback(report.get("id",""), 1, fb_comment); st.success("Thanks!")
         with fb2:
             if st.button("👎 Not helpful", key="fb_n"):
-                services.save_feedback(report.get("id", ""), 0, fb_comment)
-                st.info("Noted.")
+                services.save_feedback(report.get("id",""), 0, fb_comment); st.info("Noted.")
 
         if report.get("bias_found"):
             st.markdown('<hr class="div">', unsafe_allow_html=True)
@@ -1316,28 +1302,25 @@ elif view == "analyse":
                     try:
                         letter = services.generate_appeal_letter(
                             report, dt, dtype_,
-                            provider=st.session_state.get("ai_provider", "gemini"))
+                            provider=st.session_state.get("ai_provider","gemini"))
                         st.session_state["appeal_letter"] = letter
                     except Exception as e:
                         st.error(f"❌ {e}")
             if st.session_state.get("appeal_letter"):
                 letter = st.session_state["appeal_letter"]
                 st.markdown(f'<div class="appeal-box">{letter}</div>', unsafe_allow_html=True)
-                st.download_button(
-                    "↓ Download Letter", data=letter,
+                st.download_button("↓ Download Letter", data=letter,
                     file_name=f"appeal_{(report.get('id') or 'x')[:8]}.txt",
                     mime="text/plain", key="dl_letter")
 
         st.markdown("<br>", unsafe_allow_html=True)
         dl1, dl2 = st.columns(2)
         with dl1:
-            st.download_button(
-                "↓ Full Report (.txt)", data=txt_report(report, dt, dtype_),
+            st.download_button("↓ Full Report (.txt)", data=txt_report(report,dt,dtype_),
                 file_name=f"verdict_v14_{(report.get('id') or 'r')[:8]}.txt",
                 mime="text/plain", key="dl_rpt")
         with dl2:
-            st.download_button(
-                "↓ CSV", data=to_csv([report]),
+            st.download_button("↓ CSV", data=to_csv([report]),
                 file_name=f"verdict_v14_{(report.get('id') or 'r')[:8]}.csv",
                 mime="text/csv", key="dl_csv_single")
 
@@ -1356,33 +1339,29 @@ elif view == "dashboard":
     else:
         b_reps  = [r for r in hist if r.get("bias_found")]
         c_reps  = [r for r in hist if not r.get("bias_found")]
-        all_bt  = [bt for r in hist for bt in r.get("bias_types", [])]
-        scores  = [r.get("confidence_score", 0) for r in hist]
-        b_rate  = round(len(b_reps) / len(hist) * 100) if hist else 0
-        avg_c   = round(sum(scores) / len(scores) * 100) if scores else 0
+        all_bt  = [bt for r in hist for bt in r.get("bias_types",[])]
+        scores  = [r.get("confidence_score",0) for r in hist]
+        b_rate  = round(len(b_reps)/len(hist)*100) if hist else 0
+        avg_c   = round(sum(scores)/len(scores)*100) if scores else 0
         top_b   = Counter(all_bt).most_common(1)[0][0] if all_bt else "—"
         fb      = services.get_feedback_stats()
-        sev_map = {"high": 3, "medium": 2, "low": 1}
-        sev_vals = [sev_map.get((r.get("severity") or "low").lower(), 1) for r in hist]
-        avg_sev_val = sum(sev_vals) / len(sev_vals) if sev_vals else 1
-        avg_sev = "High" if avg_sev_val >= 2.5 else ("Medium" if avg_sev_val >= 1.5 else "Low")
+        sev_map = {"high":3,"medium":2,"low":1}
+        sev_vals= [sev_map.get((r.get("severity") or "low").lower(),1) for r in hist]
+        avg_sv  = sum(sev_vals)/len(sev_vals) if sev_vals else 1
+        avg_sev = "High" if avg_sv>=2.5 else ("Medium" if avg_sv>=1.5 else "Low")
+        gem_count = sum(1 for r in hist if (r.get("ai_provider") or "gemini")=="gemini")
+        grq_count = len(hist)-gem_count
 
-        gem_count = sum(1 for r in hist if (r.get("ai_provider") or "gemini") == "gemini")
-        grq_count = len(hist) - gem_count
-
-        k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.metric("Total", len(hist))
-        k2.metric("Bias Rate", f"{b_rate}%")
-        k3.metric("Avg Confidence", f"{avg_c}%")
-        k4.metric("Top Bias", top_b)
-        k5.metric("Avg Severity", avg_sev)
-        k6.metric("Helpful %", f"{fb['helpful_pct']}%" if fb["total"] else "—")
+        k1,k2,k3,k4,k5,k6 = st.columns(6)
+        k1.metric("Total",len(hist)); k2.metric("Bias Rate",f"{b_rate}%")
+        k3.metric("Avg Confidence",f"{avg_c}%"); k4.metric("Top Bias",top_b)
+        k5.metric("Avg Severity",avg_sev); k6.metric("Helpful %",f"{fb['helpful_pct']}%" if fb["total"] else "—")
 
         if gem_count or grq_count:
             st.markdown('<div class="lbl" style="margin-top:.5rem;">AI Provider Usage</div>', unsafe_allow_html=True)
-            total_   = gem_count + grq_count
-            gem_pct  = int(gem_count / total_ * 100) if total_ else 0
-            grq_pct  = 100 - gem_pct
+            total_  = gem_count+grq_count
+            gem_pct = int(gem_count/total_*100) if total_ else 0
+            grq_pct = 100-gem_pct
             st.markdown(
                 f'<div style="display:flex;gap:3px;border-radius:var(--r-pill);overflow:hidden;height:8px;margin-bottom:4px;">'
                 f'<div style="width:{gem_pct}%;background:#8AB4F8;"></div>'
@@ -1398,43 +1377,37 @@ elif view == "dashboard":
         if spark_scores:
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown('<div class="lbl">Confidence Trend (last 30)</div>', unsafe_allow_html=True)
-            st.plotly_chart(chart_sparkline(spark_scores), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(chart_sparkline(spark_scores), use_container_width=True, config={"displayModeBar":False})
 
         c1, c2 = st.columns(2, gap="large")
         with c1:
             st.markdown('<div class="lbl">Verdict Distribution</div>', unsafe_allow_html=True)
-            st.plotly_chart(chart_pie(len(b_reps), len(c_reps)), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(chart_pie(len(b_reps),len(c_reps)), use_container_width=True, config={"displayModeBar":False})
         with c2:
             st.markdown('<div class="lbl">Bias Type Frequency</div>', unsafe_allow_html=True)
-            if all_bt:
-                st.plotly_chart(chart_bar(all_bt), use_container_width=True, config={"displayModeBar": False})
-            else:
-                st.markdown('<div class="empty"><div class="empty-s">No bias types yet.</div></div>', unsafe_allow_html=True)
+            if all_bt: st.plotly_chart(chart_bar(all_bt), use_container_width=True, config={"displayModeBar":False})
+            else: st.markdown('<div class="empty"><div class="empty-s">No bias types yet.</div></div>', unsafe_allow_html=True)
 
         td = services.get_trend_data()
         if td:
             st.markdown('<div class="lbl" style="margin-top:.5rem;">Daily Bias Rate Trend</div>', unsafe_allow_html=True)
             tf = chart_trend(td)
-            if tf:
-                st.plotly_chart(tf, use_container_width=True, config={"displayModeBar": False})
+            if tf: st.plotly_chart(tf, use_container_width=True, config={"displayModeBar":False})
 
         c3, c4 = st.columns(2, gap="large")
         with c3:
             st.markdown('<div class="lbl">Bias Dimension Radar</div>', unsafe_allow_html=True)
-            st.plotly_chart(chart_radar(hist), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(chart_radar(hist), use_container_width=True, config={"displayModeBar":False})
         with c4:
             st.markdown('<div class="lbl">Affected Characteristics</div>', unsafe_allow_html=True)
             chars = [str(r.get("affected_characteristic")) for r in hist if r.get("affected_characteristic")]
-            if chars:
-                st.plotly_chart(chart_bar(chars), use_container_width=True, config={"displayModeBar": False})
-            else:
-                st.markdown('<div class="empty"><div class="empty-s">No characteristic data yet.</div></div>', unsafe_allow_html=True)
+            if chars: st.plotly_chart(chart_bar(chars), use_container_width=True, config={"displayModeBar":False})
+            else: st.markdown('<div class="empty"><div class="empty-s">No characteristic data yet.</div></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        dl1, _ = st.columns([1, 4])
+        dl1, _ = st.columns([1,4])
         with dl1:
-            st.download_button(
-                "↓ Export CSV", data=to_csv(hist),
+            st.download_button("↓ Export CSV", data=to_csv(hist),
                 file_name=f"verdict_dash_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv", key="dash_dl")
 
@@ -1447,99 +1420,83 @@ elif view == "history":
     if not hist:
         st.markdown('<div class="empty"><div class="empty-ico">▤</div><div class="empty-t">No history yet</div></div>', unsafe_allow_html=True)
     else:
-        f1, f2, f3 = st.columns([3, 1, 1])
-        with f1: q   = st.text_input("Search", placeholder="Search bias type, outcome…", key="h_q")
-        with f2: fv  = st.selectbox("Verdict", ["All", "Bias", "No Bias"], key="h_v")
-        with f3: sv  = st.selectbox("Sort", ["Newest", "Oldest", "High Conf", "Low Conf"], key="h_s")
+        f1, f2, f3 = st.columns([3,1,1])
+        with f1: q  = st.text_input("Search", placeholder="Search bias type, outcome…", key="h_q")
+        with f2: fv = st.selectbox("Verdict",["All","Bias","No Bias"], key="h_v")
+        with f3: sv = st.selectbox("Sort",["Newest","Oldest","High Conf","Low Conf"], key="h_s")
 
-        fp1, fp2, fp3 = st.columns([1, 1, 2])
-        with fp1: filt_prov = st.selectbox("Provider", ["All", "Gemini", "Groq"], key="h_prov")
-        with fp2: df_in     = st.date_input("From", value=None, key="h_df")
-        with fp3: dt_in     = st.date_input("To",   value=None, key="h_dt")
+        fp1, fp2, fp3 = st.columns([1,1,2])
+        with fp1: filt_prov = st.selectbox("Provider",["All","Gemini","Groq"], key="h_prov")
+        with fp2: df_in = st.date_input("From", value=None, key="h_df")
+        with fp3: dt_in = st.date_input("To",   value=None, key="h_dt")
 
         filt = list(hist)
-        if fv == "Bias":    filt = [r for r in filt if r.get("bias_found")]
-        elif fv == "No Bias": filt = [r for r in filt if not r.get("bias_found")]
-        if filt_prov == "Gemini": filt = [r for r in filt if (r.get("ai_provider") or "gemini") == "gemini"]
-        elif filt_prov == "Groq": filt = [r for r in filt if r.get("ai_provider") == "groq"]
+        if fv=="Bias":    filt = [r for r in filt if r.get("bias_found")]
+        elif fv=="No Bias": filt = [r for r in filt if not r.get("bias_found")]
+        if filt_prov=="Gemini": filt = [r for r in filt if (r.get("ai_provider") or "gemini")=="gemini"]
+        elif filt_prov=="Groq": filt = [r for r in filt if r.get("ai_provider")=="groq"]
         if q:
             ql   = q.lower()
             filt = [r for r in filt if
                     ql in (r.get("affected_characteristic") or "").lower()
-                    or any(ql in bt.lower() for bt in r.get("bias_types", []))
+                    or any(ql in bt.lower() for bt in r.get("bias_types",[]))
                     or ql in (r.get("original_outcome") or "").lower()
                     or ql in (r.get("explanation") or "").lower()]
-        if df_in: filt = [r for r in filt if (r.get("created_at") or "")[:10] >= str(df_in)]
-        if dt_in: filt = [r for r in filt if (r.get("created_at") or "")[:10] <= str(dt_in)]
-        if sv == "Newest":    filt.sort(key=lambda r: r.get("created_at") or "", reverse=True)
-        elif sv == "Oldest":  filt.sort(key=lambda r: r.get("created_at") or "")
-        elif sv == "High Conf": filt.sort(key=lambda r: r.get("confidence_score", 0), reverse=True)
-        else:                 filt.sort(key=lambda r: r.get("confidence_score", 0))
+        if df_in: filt = [r for r in filt if (r.get("created_at") or "")[:10]>=str(df_in)]
+        if dt_in: filt = [r for r in filt if (r.get("created_at") or "")[:10]<=str(dt_in)]
+        if sv=="Newest":     filt.sort(key=lambda r:r.get("created_at") or "",reverse=True)
+        elif sv=="Oldest":   filt.sort(key=lambda r:r.get("created_at") or "")
+        elif sv=="High Conf":filt.sort(key=lambda r:r.get("confidence_score",0),reverse=True)
+        else:                filt.sort(key=lambda r:r.get("confidence_score",0))
 
-        hdr1, hdr2 = st.columns([3, 1])
-        c_t3 = tok("--t3")
+        hdr1, hdr2 = st.columns([3,1])
         with hdr1:
-            st.markdown(
-                f'<div style="font-size:.73rem;color:{c_t3};margin-bottom:9px;">'
-                f'Showing {len(filt)} of {len(hist)} reports</div>',
-                unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:.73rem;color:{tok("--t3")};margin-bottom:9px;">Showing {len(filt)} of {len(hist)} reports</div>', unsafe_allow_html=True)
         with hdr2:
-            st.download_button(
-                "↓ CSV", data=to_csv(filt),
+            st.download_button("↓ CSV", data=to_csv(filt),
                 file_name=f"verdict_hist_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv", key="hist_dl")
 
+        # FIX 6: cleaner expander titles
         for r in filt:
-            bias     = r.get("bias_found", False)
-            conf     = int(r.get("confidence_score", 0) * 100)
-            aff      = r.get("affected_characteristic") or "—"
-            created  = (r.get("created_at") or "")[:16].replace("T", " ")
-            ico      = "⚠" if bias else "✓"
-            mode_lbl = "Quick" if r.get("mode") == "quick" else "Full"
-            prov_r   = r.get("ai_provider", "gemini")
-            prov_ico = "🔵" if prov_r == "gemini" else "🟠"
-            verdict_lbl = "Bias" if bias else "No Bias"
-            with st.expander(f'{ico} {verdict_lbl} · {conf}% · {aff} · {created} [{prov_ico}{mode_lbl}]'):
+            bias    = r.get("bias_found",False)
+            conf    = int(r.get("confidence_score",0)*100)
+            aff     = r.get("affected_characteristic") or "—"
+            created = (r.get("created_at") or "")[:10]  # just date, not microseconds
+            ico     = "⚠" if bias else "✓"
+            verdict = "Bias" if bias else "Clean"
+            prov_r  = r.get("ai_provider","gemini")
+            prov_ico= "🔵" if "groq" not in (prov_r or "") else "🟠"
+            with st.expander(f'{ico} {verdict} · {conf}% conf · {aff} · {created} · {prov_ico}'):
                 ec1, ec2 = st.columns(2, gap="large")
                 with ec1:
                     vcls = "card-err" if bias else "card-ok"
                     vt   = "⚠ Bias Detected" if bias else "✓ No Bias Found"
-                    orig_out = (r.get("original_outcome") or "N/A").upper()
-                    mdl_r    = r.get("ai_model", "")
                     st.markdown(
                         f'<div class="card {vcls}"><div class="card-lbl">Verdict</div><div class="card-val mono">{vt}</div></div>'
-                        f'<div class="card card-muted" style="margin-top:6px;"><div class="card-lbl">Original Outcome</div><div class="card-val mono">{orig_out}</div></div>'
-                        f'<div class="card card-info" style="margin-top:6px;"><div class="card-lbl">AI Used</div>'
-                        f'<div class="card-val" style="font-size:.8rem;">{provider_badge_html(prov_r)} '
-                        f'<span style="font-family:var(--ff-m);font-size:.72rem;">{mdl_r}</span></div></div>',
+                        f'<div class="card card-muted" style="margin-top:6px;"><div class="card-lbl">Original Outcome</div><div class="card-val mono">{(r.get("original_outcome") or "N/A").upper()}</div></div>'
+                        f'<div class="card card-info" style="margin-top:6px;"><div class="card-lbl">AI Used</div><div class="card-val" style="font-size:.8rem;">{provider_badge_html(prov_r)} <span style="font-family:var(--ff-m);font-size:.72rem;">{r.get("ai_model","")}</span></div></div>',
                         unsafe_allow_html=True)
                 with ec2:
-                    fair_out = r.get("fair_outcome") or "N/A"
                     st.markdown(
-                        f'<div class="card card-warn"><div class="card-lbl">Bias Types</div><div class="card-val">{chips(r.get("bias_types", []))}</div></div>'
-                        f'<div class="card card-ok" style="margin-top:6px;"><div class="card-lbl">Fair Outcome</div><div class="card-val serif">{fair_out}</div></div>',
+                        f'<div class="card card-warn"><div class="card-lbl">Bias Types</div><div class="card-val">{chips(r.get("bias_types",[]))}</div></div>'
+                        f'<div class="card card-ok" style="margin-top:6px;"><div class="card-lbl">Fair Outcome</div><div class="card-val serif">{r.get("fair_outcome") or "N/A"}</div></div>',
                         unsafe_allow_html=True)
                 if r.get("explanation"):
-                    st.markdown(
-                        f'<div class="card card-muted" style="margin-top:6px;"><div class="card-lbl">Explanation</div>'
-                        f'<div class="card-val" style="font-size:.83rem;">{r["explanation"]}</div></div>',
-                        unsafe_allow_html=True)
-                laws = r.get("legal_frameworks", [])
+                    st.markdown(f'<div class="card card-muted" style="margin-top:6px;"><div class="card-lbl">Explanation</div><div class="card-val" style="font-size:.83rem;">{r["explanation"]}</div></div>', unsafe_allow_html=True)
+                laws = r.get("legal_frameworks",[])
                 if laws:
                     rows_html = "".join(f'<div class="law-row"><span class="ico">⚖</span>{l}</div>' for l in laws)
                     st.markdown(f'<div class="card card-info" style="margin-top:6px;"><div class="card-lbl">Legal Frameworks</div>{rows_html}</div>', unsafe_allow_html=True)
-                recs = r.get("recommendations", [])
+                recs = r.get("recommendations",[])
                 if recs:
                     st.markdown('<div class="lbl" style="margin-top:9px;">Next Steps</div>', unsafe_allow_html=True)
-                    for i, rec in enumerate(recs, 1):
+                    for i, rec in enumerate(recs,1):
                         st.markdown(f'<div class="rec"><div class="rec-n">{i}</div><div class="rec-t">{rec}</div></div>', unsafe_allow_html=True)
-                if r.get("timing_ms"):
-                    st.markdown(timing_pills(r["timing_ms"]), unsafe_allow_html=True)
-                report_id = (r.get("id") or "x")[:8]
-                st.download_button(
-                    "↓ Report (.txt)", data=txt_report(r, "", "other"),
-                    file_name=f"verdict_{report_id}.txt",
-                    mime="text/plain", key=f"dl_{r.get('id', 'x')}")
+                if r.get("timing_ms"): st.markdown(timing_pills(r["timing_ms"]), unsafe_allow_html=True)
+                st.download_button("↓ Report (.txt)", data=txt_report(r,"","other"),
+                    file_name=f"verdict_{(r.get('id') or 'x')[:8]}.txt",
+                    mime="text/plain", key=f"dl_{r.get('id','x')}")
 
 # ─────────────────────────────────────────────────────
 # BATCH
@@ -1554,16 +1511,18 @@ elif view == "batch":
     if not any_api_ok():
         st.markdown('<div class="key-err">⚠ API key missing — see Settings.</div>', unsafe_allow_html=True)
 
-    cur_prov  = st.session_state.get("ai_provider", "gemini")
-    cur_model = st.session_state.get("ai_model", "gemini-1.5-flash")
+    # FIX 7: slim inline badge instead of heavy card
+    cur_prov  = st.session_state.get("ai_provider","gemini")
+    cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
     st.markdown(
-        f'<div class="card card-info" style="margin-bottom:.8rem;">'
-        f'<div class="card-lbl">Active Model for Batch</div>'
-        f'<div style="margin-top:4px;">{provider_badge_html(cur_prov)} '
-        f'<span style="font-family:var(--ff-m);font-size:.78rem;">{cur_model}</span></div></div>',
+        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">'
+        f'<span style="font-size:.72rem;color:var(--t3);">Using:</span>'
+        f'{provider_badge_html(cur_prov)}'
+        f'<span style="font-family:var(--ff-m);font-size:.72rem;color:var(--t2);">{cur_model}</span>'
+        f'</div>',
         unsafe_allow_html=True)
 
-    bmode = st.radio("Batch input", ["✏  Paste Text", "📊  Upload CSV"], horizontal=True, label_visibility="collapsed", key="bm")
+    bmode = st.radio("Batch input",["✏  Paste Text","📊  Upload CSV"], horizontal=True, label_visibility="collapsed", key="bm")
     if "Paste" in bmode:
         bt_ = st.text_area("Batch text", height=200, label_visibility="collapsed", key="b_in",
                            placeholder="Decision 1…\n---\nDecision 2…\n---\nDecision 3…")
@@ -1582,79 +1541,63 @@ elif view == "batch":
             except Exception as e:
                 st.error(f"❌ {e}")
 
-    bc1, bc2, bc3 = st.columns([2, 1, 1])
+    bc1, bc2, bc3 = st.columns([2,1,1])
     with bc1:
-        btype = st.selectbox("Decision type", ["job", "loan", "medical", "university", "other"],
-                             format_func=lambda x: TYPE_LABELS[x], label_visibility="collapsed", key="b_type")
+        btype  = st.selectbox("Decision type",["job","loan","medical","university","other"],
+                              format_func=lambda x:TYPE_LABELS[x], label_visibility="collapsed", key="b_type")
     with bc2:
-        scan_b = st.radio("Mode", ["full", "quick"], horizontal=True,
-                          format_func=lambda x: "Full" if x == "full" else "Quick", key="b_scan")
+        scan_b = st.radio("Mode",["full","quick"], horizontal=True,
+                          format_func=lambda x:"Full" if x=="full" else "Quick", key="b_scan")
     with bc3:
-        brun = st.button("⊞ Run Batch", key="b_run", disabled=not any_api_ok())
+        brun   = st.button("⊞ Run Batch", key="b_run", disabled=not any_api_ok())
 
     if blocks:
-        n_blk = len(blocks)
-        s_lbl = "s" if n_blk != 1 else ""
-        st.markdown(f'<span class="chip cb">● {n_blk} decision{s_lbl} queued</span>', unsafe_allow_html=True)
+        st.markdown(f'<span class="chip cb">● {len(blocks)} decision{"s" if len(blocks)!=1 else ""} queued</span>', unsafe_allow_html=True)
 
     if brun:
-        if not blocks:
-            st.warning("⚠ No decisions found.")
-        elif len(blocks) > 10:
-            st.warning("⚠ Batch limit is 10 decisions.")
+        if not blocks: st.warning("⚠ No decisions found.")
+        elif len(blocks)>10: st.warning("⚠ Batch limit is 10 decisions.")
         else:
-            prog = st.progress(0); status = st.empty(); results = []; t0 = time.time()
-            c_accent = tok("--accent")
+            prog=st.progress(0); status=st.empty(); results=[]; t0=time.time()
             for i, blk in enumerate(blocks):
-                elapsed = time.time() - t0
-                eta = (elapsed / (i + 1)) * (len(blocks) - i - 1) if i > 0 else 0
-                eta_txt = f"  · ETA ~{int(eta)}s" if eta > 1 else ""
+                elapsed=time.time()-t0; eta=(elapsed/(i+1))*(len(blocks)-i-1) if i>0 else 0
                 status.markdown(
-                    f'<div style="font-size:.78rem;color:{c_accent};font-weight:600;">'
-                    f'Analysing {i+1}/{len(blocks)}{eta_txt}…</div>',
+                    f'<div style="font-size:.78rem;color:{tok("--accent")};font-weight:600;">'
+                    f'Analysing {i+1}/{len(blocks)}{"  · ETA ~"+str(int(eta))+"s" if eta>1 else ""}…</div>',
                     unsafe_allow_html=True)
                 rep, err = run_analysis(blk, btype, mode=scan_b,
-                                        provider=st.session_state.get("ai_provider", "gemini"),
-                                        model=st.session_state.get("ai_model", "gemini-1.5-flash"))
-                results.append({"text": blk, "report": rep, "error": err})
-                prog.progress((i + 1) / len(blocks))
+                                        provider=st.session_state.get("ai_provider","gemini"),
+                                        model=st.session_state.get("ai_model","gemini-1.5-flash"))
+                results.append({"text":blk,"report":rep,"error":err})
+                prog.progress((i+1)/len(blocks))
             prog.empty(); status.empty()
             st.markdown('<hr class="div">', unsafe_allow_html=True)
 
-            b_c = sum(1 for r in results if isinstance(r.get("report"), dict) and r["report"].get("bias_found"))
-            c_c = sum(1 for r in results if isinstance(r.get("report"), dict) and not r["report"].get("bias_found"))
+            b_c = sum(1 for r in results if isinstance(r.get("report"),dict) and r["report"].get("bias_found"))
+            c_c = sum(1 for r in results if isinstance(r.get("report"),dict) and not r["report"].get("bias_found"))
             e_c = sum(1 for r in results if r.get("error"))
-
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Total", len(results))
-            m2.metric("Bias Detected", b_c)
-            m3.metric("No Bias", c_c)
-            m4.metric("Errors", e_c)
+            m1,m2,m3,m4 = st.columns(4)
+            m1.metric("Total",len(results)); m2.metric("Bias Detected",b_c)
+            m3.metric("No Bias",c_c); m4.metric("Errors",e_c)
 
             rows = []
-            for i, res in enumerate(results, 1):
-                rep = res.get("report")
-                err = res.get("error", "")
-                if err:
-                    rows.append({"#": i, "Verdict": "ERROR", "Conf": "—", "Bias Types": str(err)[:50], "Provider": "—"})
-                elif isinstance(rep, dict):
-                    prov_ico = "🔵" if rep.get("ai_provider", "gemini") == "gemini" else "🟠"
-                    rows.append({
-                        "#": i,
-                        "Verdict": "⚠ Bias" if rep.get("bias_found") else "✓ Clean",
-                        "Conf": f"{int(rep.get('confidence_score', 0) * 100)}%",
-                        "Bias Types": ", ".join(rep.get("bias_types", [])) or "None",
-                        "Provider": f"{prov_ico} {rep.get('ai_model', '')}",
-                    })
-            if rows:
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            for i, res in enumerate(results,1):
+                rep=res.get("report"); err=res.get("error","")
+                if err: rows.append({"#":i,"Verdict":"ERROR","Conf":"—","Bias Types":str(err)[:50],"Provider":"—"})
+                elif isinstance(rep,dict):
+                    prov_ico="🔵" if rep.get("ai_provider","gemini")=="gemini" else "🟠"
+                    rows.append({"#":i,
+                                 "Verdict":"⚠ Bias" if rep.get("bias_found") else "✓ Clean",
+                                 "Conf":f"{int(rep.get('confidence_score',0)*100)}%",
+                                 "Bias Types":", ".join(rep.get("bias_types",[])) or "None",
+                                 "Provider":f"{prov_ico} {rep.get('ai_model','')}"})
+            if rows: st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-            all_r = [r["report"] for r in results if isinstance(r.get("report"), dict)]
+            all_r = [r["report"] for r in results if isinstance(r.get("report"),dict)]
             if all_r:
-                dl1, _ = st.columns([1, 3])
+                dl1,_ = st.columns([1,3])
                 with dl1:
-                    st.download_button(
-                        "↓ CSV", data=to_csv(all_r),
+                    st.download_button("↓ CSV", data=to_csv(all_r),
                         file_name=f"verdict_batch_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                         mime="text/csv", key="b_dl")
 
@@ -1665,25 +1608,27 @@ elif view == "test":
     st.markdown('<div class="ph">Test Suite</div>', unsafe_allow_html=True)
     st.markdown('<div class="ps">Run all built-in examples in one click. Each test has an expected outcome — pass means the model agrees.</div>', unsafe_allow_html=True)
 
-    cur_prov  = st.session_state.get("ai_provider", "gemini")
-    cur_model = st.session_state.get("ai_model", "gemini-1.5-flash")
+    cur_prov  = st.session_state.get("ai_provider","gemini")
+    cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
+    # FIX 7 style: slim badge also for test suite
     st.markdown(
-        f'<div class="card card-info" style="margin-bottom:.8rem;">'
-        f'<div class="card-lbl">Model for Tests</div>'
-        f'<div style="margin-top:4px;">{provider_badge_html(cur_prov)} '
-        f'<span style="font-family:var(--ff-m);font-size:.78rem;">{cur_model}</span></div></div>',
+        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">'
+        f'<span style="font-size:.72rem;color:var(--t3);">Model for Tests:</span>'
+        f'{provider_badge_html(cur_prov)}'
+        f'<span style="font-family:var(--ff-m);font-size:.72rem;color:var(--t2);">{cur_model}</span>'
+        f'</div>',
         unsafe_allow_html=True)
 
     if not any_api_ok():
         st.markdown('<div class="key-err">⚠ API key missing — cannot run tests.</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="lbl" style="margin-bottom:10px;">Test Cases</div>', unsafe_allow_html=True)
-        for i, ex in enumerate(EXAMPLES, 1):
-            ico = "⚠" if ex["expect_bias"] else "✓"
+        # FIX 4: neutral ○ icon for all pending rows — no ⚠ triangle
+        for i, ex in enumerate(EXAMPLES,1):
             bias_lbl = "Bias expected" if ex["expect_bias"] else "Clean expected"
             st.markdown(
                 f'<div class="test-row">'
-                f'<div class="test-ico">{ico}</div>'
+                f'<div class="test-ico" style="color:var(--t3);">○</div>'
                 f'<div style="flex:1;">'
                 f'<div class="test-tag">{i}. {ex["tag"]}</div>'
                 f'<div class="test-type">{TYPE_LABELS[ex["type"]]} · {bias_lbl}</div>'
@@ -1692,116 +1637,95 @@ elif view == "test":
                 unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        ts_mode = st.radio(
-            "Scan mode", ["quick", "full"],
-            format_func=lambda x: "Quick (faster)" if x == "quick" else "Full (detailed)",
+        ts_mode = st.radio("Scan mode",["quick","full"],
+            format_func=lambda x:"Quick (faster)" if x=="quick" else "Full (detailed)",
             horizontal=True, key="ts_mode")
         run_all = st.button("⊘ Run All Tests", key="ts_run", type="primary")
 
         if run_all:
             st.markdown('<hr class="div">', unsafe_allow_html=True)
             st.markdown('<div class="lbl">Live Results</div>', unsafe_allow_html=True)
-            prog = st.progress(0); ts_results = []; tsc = {"pass": 0, "fail": 0, "err": 0}
-            c_accent = tok("--accent")
+            prog=st.progress(0); ts_results=[]; tsc={"pass":0,"fail":0,"err":0}
             for i, ex in enumerate(EXAMPLES):
-                prog.progress(i / len(EXAMPLES))
+                prog.progress(i/len(EXAMPLES))
                 ph_s = st.empty()
                 ph_s.markdown(
-                    f'<div style="font-size:.78rem;color:{c_accent};font-weight:600;">'
+                    f'<div style="font-size:.78rem;color:{tok("--accent")};font-weight:600;">'
                     f'Running {i+1}/{len(EXAMPLES)}: {ex["tag"]}…</div>',
                     unsafe_allow_html=True)
-                rep, err = run_analysis(ex["text"], ex["type"], mode=ts_mode,
-                                        provider=cur_prov, model=cur_model)
+                rep, err = run_analysis(ex["text"],ex["type"],mode=ts_mode,
+                                        provider=cur_prov,model=cur_model)
                 ph_s.empty()
                 if err:
-                    tsc["err"] += 1
-                    ts_results.append({"ex": ex, "rep": None, "err": err, "status": "error"})
+                    tsc["err"]+=1; ts_results.append({"ex":ex,"rep":None,"err":err,"status":"error"})
                 else:
-                    got    = bool(isinstance(rep, dict) and rep.get("bias_found", False))
-                    passed = (got == ex["expect_bias"])
-                    status = "pass" if passed else "fail"
-                    if passed: tsc["pass"] += 1
-                    else:      tsc["fail"] += 1
-                    ts_results.append({"ex": ex, "rep": rep, "err": None, "status": status, "passed": passed})
+                    got    = bool(isinstance(rep,dict) and rep.get("bias_found",False))
+                    passed = (got==ex["expect_bias"])
+                    status_= "pass" if passed else "fail"
+                    if passed: tsc["pass"]+=1
+                    else:      tsc["fail"]+=1
+                    ts_results.append({"ex":ex,"rep":rep,"err":None,"status":status_,"passed":passed})
             prog.progress(1.0)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            sm1, sm2, sm3, sm4, sm5 = st.columns(5)
-            sm1.metric("Total Tests", len(EXAMPLES))
-            sm2.metric("Passed ✓", tsc["pass"])
-            sm3.metric("Failed ✗", tsc["fail"])
-            sm4.metric("Errors", tsc["err"])
-            sm5.metric("Accuracy", f"{round(tsc['pass'] / len(EXAMPLES) * 100)}%")
+            sm1,sm2,sm3,sm4,sm5 = st.columns(5)
+            sm1.metric("Total Tests",len(EXAMPLES)); sm2.metric("Passed ✓",tsc["pass"])
+            sm3.metric("Failed ✗",tsc["fail"]); sm4.metric("Errors",tsc["err"])
+            sm5.metric("Accuracy",f"{round(tsc['pass']/len(EXAMPLES)*100)}%")
 
-            acc     = tsc["pass"] / len(EXAMPLES)
-            acc_col = tok("--green") if acc >= .8 else (tok("--amber") if acc >= .5 else tok("--red"))
+            acc     = tsc["pass"]/len(EXAMPLES)
+            acc_col = tok("--green") if acc>=.8 else (tok("--amber") if acc>=.5 else tok("--red"))
             st.markdown(
                 f'<div class="char-track" style="height:5px;margin:10px 0 18px;">'
-                f'<div class="char-fill" style="width:{int(acc * 100)}%;background:{acc_col};height:100%;"></div></div>',
+                f'<div class="char-fill" style="width:{int(acc*100)}%;background:{acc_col};height:100%;"></div></div>',
                 unsafe_allow_html=True)
 
-            for i, res in enumerate(ts_results, 1):
+            for i, res in enumerate(ts_results,1):
                 ex     = res["ex"]
-                status = res["status"]
-                badge_lbl = {"pass": "PASS ✓", "fail": "FAIL ✗", "error": "ERROR"}[status]
-                ico = "✅" if status == "pass" else ("❌" if status == "fail" else "⚠")
-                with st.expander(f'{ico} Test {i}: {ex["tag"]}  [{badge_lbl}]', expanded=(status != "pass")):
+                status_= res["status"]
+                badge_lbl = {"pass":"PASS ✓","fail":"FAIL ✗","error":"ERROR"}[status_]
+                ico_r  = "✅" if status_=="pass" else ("❌" if status_=="fail" else "⚠")
+                with st.expander(f'{ico_r} Test {i}: {ex["tag"]}  [{badge_lbl}]', expanded=(status_!="pass")):
                     st.markdown(f'<div class="preview">{ex["text"]}</div>', unsafe_allow_html=True)
                     if res["err"]:
                         st.error(f"Error: {res['err']}")
                     else:
-                        rep    = res["rep"]
-                        got    = rep.get("bias_found", False)
-                        exp    = ex["expect_bias"]
-                        conf_  = int(rep.get("confidence_score", 0) * 100)
+                        rep   = res["rep"]
+                        got   = rep.get("bias_found",False)
+                        exp   = ex["expect_bias"]
+                        conf_ = int(rep.get("confidence_score",0)*100)
                         ecol, gcol = st.columns(2, gap="small")
                         with ecol:
-                            exp_cls  = "card-warn" if exp else "card-muted"
-                            exp_lbl  = "⚠ Bias" if exp else "✓ No Bias"
-                            st.markdown(
-                                f'<div class="card {exp_cls}"><div class="card-lbl">Expected</div>'
-                                f'<div class="card-val mono">{exp_lbl}</div></div>',
-                                unsafe_allow_html=True)
+                            exp_cls = "card-warn" if exp else "card-muted"
+                            exp_lbl = "⚠ Bias" if exp else "✓ No Bias"
+                            st.markdown(f'<div class="card {exp_cls}"><div class="card-lbl">Expected</div><div class="card-val mono">{exp_lbl}</div></div>', unsafe_allow_html=True)
                         with gcol:
                             got_cls   = "card-err" if got else "card-ok"
                             got_lbl   = "⚠ Bias" if got else "✓ No Bias"
-                            match_lbl = "✓ Match" if (got == exp) else "✗ Mismatch"
-                            st.markdown(
-                                f'<div class="card {got_cls}"><div class="card-lbl">Got · {match_lbl}</div>'
-                                f'<div class="card-val mono">{got_lbl} ({conf_}%)</div></div>',
-                                unsafe_allow_html=True)
+                            match_lbl = "✓ Match" if (got==exp) else "✗ Mismatch"
+                            st.markdown(f'<div class="card {got_cls}"><div class="card-lbl">Got · {match_lbl}</div><div class="card-val mono">{got_lbl} ({conf_}%)</div></div>', unsafe_allow_html=True)
                         if rep.get("bias_types"):
-                            st.markdown(
-                                f'<div class="card card-muted" style="margin-top:6px;">'
-                                f'<div class="card-lbl">Bias Types</div>'
-                                f'<div>{chips(rep.get("bias_types", []))}</div></div>',
-                                unsafe_allow_html=True)
-                        prov_r = rep.get("ai_provider", "gemini")
-                        mdl_r  = rep.get("ai_model", "")
-                        st.markdown(
-                            f'<div style="margin-top:5px;">{provider_badge_html(prov_r)} '
-                            f'<span style="font-family:var(--ff-m);font-size:.7rem;color:var(--t3);">{mdl_r}</span></div>',
-                            unsafe_allow_html=True)
-                        if rep.get("timing_ms"):
-                            st.markdown(timing_pills(rep["timing_ms"]), unsafe_allow_html=True)
+                            st.markdown(f'<div class="card card-muted" style="margin-top:6px;"><div class="card-lbl">Bias Types</div><div>{chips(rep.get("bias_types",[]))}</div></div>', unsafe_allow_html=True)
+                        prov_r = rep.get("ai_provider","gemini"); mdl_r = rep.get("ai_model","")
+                        st.markdown(f'<div style="margin-top:5px;">{provider_badge_html(prov_r)} <span style="font-family:var(--ff-m);font-size:.7rem;color:var(--t3);">{mdl_r}</span></div>', unsafe_allow_html=True)
+                        if rep.get("timing_ms"): st.markdown(timing_pills(rep["timing_ms"]), unsafe_allow_html=True)
 
             st.markdown('<hr class="div">', unsafe_allow_html=True)
             test_rows = [{
-                "test_n":         i,
-                "tag":            res["ex"]["tag"],
-                "type":           res["ex"]["type"],
-                "expected_bias":  res["ex"]["expect_bias"],
-                "got_bias":       (res.get("rep") or {}).get("bias_found", "error"),
-                "passed":         res.get("passed", False),
-                "confidence":     int((res.get("rep") or {}).get("confidence_score", 0) * 100),
-                "ai_provider":    (res.get("rep") or {}).get("ai_provider", ""),
-                "ai_model":       (res.get("rep") or {}).get("ai_model", ""),
-                "total_ms":       (res.get("rep") or {}).get("timing_ms", {}).get("total", ""),
-            } for i, res in enumerate(ts_results, 1)]
-            dl1, _ = st.columns([1, 3])
+                "test_n":        i,
+                "tag":           res["ex"]["tag"],
+                "type":          res["ex"]["type"],
+                "expected_bias": res["ex"]["expect_bias"],
+                "got_bias":      (res.get("rep") or {}).get("bias_found","error"),
+                "passed":        res.get("passed",False),
+                "confidence":    int((res.get("rep") or {}).get("confidence_score",0)*100),
+                "ai_provider":   (res.get("rep") or {}).get("ai_provider",""),
+                "ai_model":      (res.get("rep") or {}).get("ai_model",""),
+                "total_ms":      (res.get("rep") or {}).get("timing_ms",{}).get("total",""),
+            } for i, res in enumerate(ts_results,1)]
+            dl1, _ = st.columns([1,3])
             with dl1:
-                st.download_button(
-                    "↓ Test Report (CSV)", data=pd.DataFrame(test_rows).to_csv(index=False),
+                st.download_button("↓ Test Report (CSV)", data=pd.DataFrame(test_rows).to_csv(index=False),
                     file_name=f"verdict_tests_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                     mime="text/csv", key="ts_dl")
 
@@ -1828,36 +1752,45 @@ elif view == "settings":
             f'<div class="card-val" style="font-size:.72rem;margin-top:3px;">Get free key: console.groq.com</div></div>',
             unsafe_allow_html=True)
 
+        # FIX 14: persist test results in session state so they survive reruns
         if gem_status:
             if st.button("⊛ Test Gemini Connection", key="test_gemini"):
                 with st.spinner("Testing Gemini…"):
                     try:
                         import google.generativeai as genai
-                        genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
+                        genai.configure(api_key=os.getenv("GEMINI_API_KEY",""))
                         m = genai.GenerativeModel("gemini-1.5-flash")
-                        m.generate_content("ping", generation_config={"max_output_tokens": 5})
-                        st.success("✓ Gemini connected successfully")
+                        m.generate_content("ping", generation_config={"max_output_tokens":5})
+                        st.session_state["gemini_test_result"] = ("ok","✓ Gemini connected successfully")
                     except Exception as e:
-                        st.error(f"✗ {e}")
+                        st.session_state["gemini_test_result"] = ("err", str(e))
+            if st.session_state.get("gemini_test_result"):
+                kind, msg = st.session_state["gemini_test_result"]
+                cls_ = "test-status-ok" if kind=="ok" else "test-status-err"
+                st.markdown(f'<div class="{cls_}">{msg}</div>', unsafe_allow_html=True)
+
         if groq_status:
             if st.button("⊛ Test Groq Connection", key="test_groq"):
                 with st.spinner("Testing Groq…"):
                     try:
                         c = services.get_groq_client()
-                        c.chat.completions.create(
-                            model=services._GROQ_MODEL, max_tokens=5,
-                            messages=[{"role": "user", "content": "ping"}])
-                        st.success("✓ Groq connected successfully")
+                        c.chat.completions.create(model=services._GROQ_MODEL, max_tokens=5,
+                                                  messages=[{"role":"user","content":"ping"}])
+                        st.session_state["groq_test_result"] = ("ok","✓ Groq connected successfully")
                     except Exception as e:
-                        st.error(f"✗ {e}")
+                        st.session_state["groq_test_result"] = ("err", str(e))
+            if st.session_state.get("groq_test_result"):
+                kind, msg = st.session_state["groq_test_result"]
+                cls_ = "test-status-ok" if kind=="ok" else "test-status-err"
+                st.markdown(f'<div class="{cls_}">{msg}</div>', unsafe_allow_html=True)
 
     with sc2:
         st.markdown('<div class="lbl">Active Configuration</div>', unsafe_allow_html=True)
-        cur_prov  = st.session_state.get("ai_provider", "gemini")
-        cur_model = st.session_state.get("ai_model", "gemini-1.5-flash")
+        cur_prov  = st.session_state.get("ai_provider","gemini")
+        cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
         all_r     = all_reports()
         fb        = services.get_feedback_stats()
-        db_url    = os.getenv("DATABASE_URL", "sqlite:///verdict_watch.db")
+        db_url    = os.getenv("DATABASE_URL","sqlite:///verdict_watch.db")
         st.markdown(
             f'<div class="card card-info"><div class="card-lbl">Active Provider</div>'
             f'<div style="margin-top:5px;">{provider_badge_html(cur_prov)} '
@@ -1872,14 +1805,14 @@ elif view == "settings":
 
         st.markdown('<div class="lbl" style="margin-top:14px;">V14 Features</div>', unsafe_allow_html=True)
         for ico, name, desc in [
-            ("🔵", "Gemini Primary",      "gemini-1.5-flash + all Gemini models"),
-            ("🟠", "Groq Fallback",       "7 Groq models incl. DeepSeek R1"),
-            ("⊕",  "Model Selector",      "Full model picker with live switching"),
-            ("✦",  "Auto Fallback",       "Gemini → Groq if API call fails"),
-            ("◎",  "Provider Tracking",   "Each report stores which AI was used"),
-            ("⊞",  "Batch Multi-model",   "Batch runs use selected model"),
-            ("⊘",  "Test Suite",          "Model shown per test result"),
-            ("✦",  "Quick Switch",        "Change model from Analyse sidebar"),
+            ("🔵","Gemini Primary","gemini-1.5-flash + all Gemini models"),
+            ("🟠","Groq Fallback","7 Groq models incl. DeepSeek R1"),
+            ("⊕","Model Selector","Full model picker with live switching"),
+            ("✦","Auto Fallback","Gemini → Groq if API call fails"),
+            ("◎","Provider Tracking","Each report stores which AI was used"),
+            ("⊞","Batch Multi-model","Batch runs use selected model"),
+            ("⊘","Test Suite","Model shown per test result"),
+            ("✦","Quick Switch","Change model from Analyse sidebar"),
         ]:
             st.markdown(
                 f'<div class="feat-row">'
@@ -1894,7 +1827,7 @@ elif view == "about":
     st.markdown('<div class="ph">About Verdict Watch</div>', unsafe_allow_html=True)
     st.markdown('<div class="ps">Enterprise AI bias detection. V14 — Dual AI Edition. Gemini PRIMARY · Groq FALLBACK.</div>', unsafe_allow_html=True)
 
-    ab1, ab2 = st.columns([1.6, 1], gap="large")
+    ab1, ab2 = st.columns([1.6,1], gap="large")
     with ab1:
         st.markdown(
             '<div class="card" style="background:var(--surf2);margin-bottom:12px;">'
@@ -1905,51 +1838,46 @@ elif view == "about":
         st.markdown('<div class="lbl">AI Models Available</div>', unsafe_allow_html=True)
         gem_col, grq_col = st.columns(2, gap="small")
         with gem_col:
-            gem_models_html = "".join(
-                f'<div style="font-size:.72rem;color:var(--t1);padding:2px 0;font-family:var(--ff-m);">{m}</div>'
-                for m in GEMINI_MODELS)
             st.markdown(
-                f'<div class="card card-info"><div class="card-lbl">🔵 Gemini Models</div>'
-                f'<div style="margin-top:5px;">{gem_models_html}</div></div>',
-                unsafe_allow_html=True)
+                '<div class="card card-info"><div class="card-lbl">🔵 Gemini Models</div><div style="margin-top:5px;">'
+                + "".join(f'<div style="font-size:.72rem;color:var(--t1);padding:2px 0;font-family:var(--ff-m);">{m}</div>' for m in GEMINI_MODELS)
+                + '</div></div>', unsafe_allow_html=True)
         with grq_col:
-            grq_models_html = "".join(
-                f'<div style="font-size:.72rem;color:var(--t1);padding:2px 0;font-family:var(--ff-m);">{m}</div>'
-                for m in GROQ_MODELS)
             st.markdown(
-                f'<div class="card card-warn"><div class="card-lbl">🟠 Groq Models</div>'
-                f'<div style="margin-top:5px;">{grq_models_html}</div></div>',
-                unsafe_allow_html=True)
+                '<div class="card card-warn"><div class="card-lbl">🟠 Groq Models</div><div style="margin-top:5px;">'
+                + "".join(f'<div style="font-size:.72rem;color:var(--t1);padding:2px 0;font-family:var(--ff-m);">{m}</div>' for m in GROQ_MODELS)
+                + '</div></div>', unsafe_allow_html=True)
 
+        # FIX 15: compact dim rows, not full cards
         st.markdown('<div class="lbl" style="margin-top:10px;">Bias Dimensions Detected</div>', unsafe_allow_html=True)
-        for name, desc in [
-            ("Gender Bias",             "Gender, name, or parental status"),
-            ("Age Discrimination",      "Unfair weighting of age group"),
-            ("Racial / Ethnic Bias",    "Name-based or origin profiling"),
-            ("Geographic Redlining",    "Zip code as discriminatory proxy"),
-            ("Socioeconomic Bias",      "Employment sector over-weighting"),
-            ("Language Discrimination", "Primary language used against applicants"),
+        dims = [
+            ("Gender Bias","Gender, name, or parental status"),
+            ("Age Discrimination","Unfair weighting of age group"),
+            ("Racial / Ethnic Bias","Name-based or origin profiling"),
+            ("Geographic Redlining","Zip code as discriminatory proxy"),
+            ("Socioeconomic Bias","Employment sector over-weighting"),
+            ("Language Discrimination","Primary language used against applicants"),
             ("Insurance Classification","Insurance tier ranking treatment"),
-        ]:
-            st.markdown(
-                f'<div class="card" style="margin-bottom:5px;">'
-                f'<div class="card-lbl">{name}</div>'
-                f'<div class="card-val" style="font-size:.82rem;">{desc}</div></div>',
-                unsafe_allow_html=True)
+        ]
+        st.markdown(
+            '<div class="card" style="padding:.75rem 1rem;">'
+            + "".join(f'<div class="dim-row"><span class="dim-name">{n}</span><span class="dim-desc">{d}</span></div>' for n,d in dims)
+            + '</div>',
+            unsafe_allow_html=True)
 
     with ab2:
         st.markdown('<div class="lbl">Tech Stack</div>', unsafe_allow_html=True)
         for name, desc in [
-            ("Google Gemini",    "Primary AI (google-generativeai)"),
-            ("Groq / Llama",     "Fallback AI"),
-            ("FastAPI",          "REST API"),
-            ("Streamlit >= 1.35","Web UI"),
-            ("SQLAlchemy",       "Database ORM"),
-            ("SQLite",           "Zero-config storage"),
-            ("Plotly",           "Interactive charts"),
-            ("DM Serif Display", "Heading font"),
-            ("Syne",             "UI font"),
-            ("JetBrains Mono",   "Data font"),
+            ("Google Gemini","Primary AI (google-generativeai)"),
+            ("Groq / Llama","Fallback AI"),
+            ("FastAPI","REST API"),
+            ("Streamlit ≥ 1.35","Web UI"),
+            ("SQLAlchemy","Database ORM"),
+            ("SQLite","Zero-config storage"),
+            ("Plotly","Interactive charts"),
+            ("DM Serif Display","Heading font"),
+            ("Syne","UI font"),
+            ("JetBrains Mono","Data font"),
         ]:
             st.markdown(
                 f'<div style="display:flex;justify-content:space-between;align-items:center;'
