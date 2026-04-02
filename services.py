@@ -1,15 +1,14 @@
 """
-services.py — Verdict Watch V11
-Database models + 3-chain Groq pipeline.
+services.py — Verdict Watch V14
+Database models + Dual AI pipeline (Gemini PRIMARY + Groq FALLBACK).
 
-V11 changes:
-  - Timing metadata per pipeline step
-  - Quick-scan mode (single Groq call)
-  - Per-step retry counter stored in report
-  - Cleaner structured logging
-  - Feedback comments stored
-  - get_confidence_trend() for sparkline
-  - Safe schema migration (idempotent)
+V14 changes:
+  - Gemini (google-generativeai) as PRIMARY model
+  - Groq (Llama 3.3 70B) as FALLBACK
+  - User-selectable AI provider via parameter
+  - Auto-fallback: if Gemini fails, silently retries with Groq
+  - Provider metadata stored in report (which AI was used)
+  - All existing features preserved
 """
 
 import os
@@ -27,7 +26,6 @@ from sqlalchemy import (
     Text, DateTime, Integer, text as sa_text,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from groq import Groq
 
 load_dotenv()
 
@@ -52,12 +50,13 @@ SessionLocal = sessionmaker(bind=engine)
 Base         = declarative_base()
 
 _MIGRATIONS = [
-    ("analyses",  "text_hash",      "ALTER TABLE analyses ADD COLUMN text_hash VARCHAR"),
-    ("analyses",  "decision_type",  "ALTER TABLE analyses ADD COLUMN decision_type VARCHAR"),
-    ("reports",   "bias_phrases",   "ALTER TABLE reports  ADD COLUMN bias_phrases TEXT"),
-    ("reports",   "timing_ms",      "ALTER TABLE reports  ADD COLUMN timing_ms TEXT"),
-    ("reports",   "retry_counts",   "ALTER TABLE reports  ADD COLUMN retry_counts TEXT"),
-    ("feedback",  "comment",        "ALTER TABLE feedback ADD COLUMN comment TEXT"),
+    ("analyses", "text_hash",     "ALTER TABLE analyses ADD COLUMN text_hash VARCHAR"),
+    ("analyses", "decision_type", "ALTER TABLE analyses ADD COLUMN decision_type VARCHAR"),
+    ("reports",  "bias_phrases",  "ALTER TABLE reports  ADD COLUMN bias_phrases TEXT"),
+    ("reports",  "timing_ms",     "ALTER TABLE reports  ADD COLUMN timing_ms TEXT"),
+    ("reports",  "retry_counts",  "ALTER TABLE reports  ADD COLUMN retry_counts TEXT"),
+    ("reports",  "ai_provider",   "ALTER TABLE reports  ADD COLUMN ai_provider VARCHAR"),
+    ("feedback", "comment",       "ALTER TABLE feedback ADD COLUMN comment TEXT"),
 ]
 
 
@@ -82,10 +81,11 @@ class Report(Base):
     fair_outcome            = Column(String)
     explanation             = Column(Text)
     confidence_score        = Column(Float,   default=0.0)
-    recommendations         = Column(Text)   # JSON blob
-    bias_phrases            = Column(Text)   # JSON list
-    timing_ms               = Column(Text)   # JSON {"extract":ms,"detect":ms,"fair":ms}
-    retry_counts            = Column(Text)   # JSON {"extract":n,"detect":n,"fair":n}
+    recommendations         = Column(Text)
+    bias_phrases            = Column(Text)
+    timing_ms               = Column(Text)
+    retry_counts            = Column(Text)
+    ai_provider             = Column(String,  default="gemini")
     created_at              = Column(DateTime, default=datetime.utcnow)
 
 
@@ -93,13 +93,12 @@ class Feedback(Base):
     __tablename__ = "feedback"
     id         = Column(String,  primary_key=True, default=lambda: str(uuid.uuid4()))
     report_id  = Column(String,  nullable=False, index=True)
-    rating     = Column(Integer, nullable=False)   # 1 = helpful, 0 = not helpful
+    rating     = Column(Integer, nullable=False)
     comment    = Column(Text,    default="")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db() -> None:
-    """Create tables then run idempotent column migrations."""
     Base.metadata.create_all(bind=engine)
     with engine.connect() as conn:
         for table, col, ddl in _MIGRATIONS:
@@ -112,7 +111,7 @@ def init_db() -> None:
                     log.info("Migration: added %s.%s", table, col)
             except Exception as exc:
                 log.warning("Migration skipped (%s.%s): %s", table, col, exc)
-    log.info("Database ready (V11).")
+    log.info("Database ready (V14).")
 
 
 def get_db() -> Session:
@@ -146,77 +145,142 @@ def find_duplicate(text_hash: str) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────
-# GROQ CLIENT + CALL HELPERS
+# AI PROVIDER CONSTANTS
 # ─────────────────────────────────────────────
 
-_MODEL       = "llama-3.3-70b-versatile"
-_MAX_RETRIES = 3
-_RETRY_DELAY = 1.5
+_GEMINI_MODEL = "gemini-1.5-flash"   # Primary — Google AI
+_GROQ_MODEL   = "llama-3.3-70b-versatile"  # Fallback
+_MAX_RETRIES  = 3
+_RETRY_DELAY  = 1.5
+
+PROVIDER_GEMINI = "gemini"
+PROVIDER_GROQ   = "groq"
 
 
-def get_groq_client() -> Groq:
-    key = os.getenv("GROQ_API_KEY", "").strip()
+# ─────────────────────────────────────────────
+# GEMINI CLIENT
+# ─────────────────────────────────────────────
+
+def get_gemini_client():
+    """Return configured Gemini GenerativeModel."""
+    import google.generativeai as genai
+    key = os.getenv("GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", "")).strip()
     if not key:
         raise ValueError(
-            "GROQ_API_KEY is not set. "
-            "Add it to .env: GROQ_API_KEY=gsk_..."
+            "GEMINI_API_KEY not set. "
+            "Get a free key at: https://aistudio.google.com/app/apikey"
         )
-    return Groq(api_key=key)
+    genai.configure(api_key=key)
+    return genai.GenerativeModel(_GEMINI_MODEL)
 
 
-def _call_groq_json(messages: list[dict], label: str) -> tuple[dict, int, int]:
-    """
-    Call Groq expecting JSON back.
-    Returns (parsed_dict, retry_count, elapsed_ms).
-    """
-    client     = get_groq_client()
-    retries    = 0
-    t0         = time.perf_counter()
-
+def _call_gemini_json(prompt: str, label: str) -> tuple[dict, int, int]:
+    """Call Gemini expecting JSON back. Returns (parsed_dict, retry_count, elapsed_ms)."""
+    t0      = time.perf_counter()
+    retries = 0
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            log.info("Groq %s — attempt %d", label, attempt)
-            resp = client.chat.completions.create(
-                model=_MODEL,
-                max_tokens=1024,
-                temperature=0.1,
-                messages=messages,
+            log.info("Gemini %s — attempt %d", label, attempt)
+            model    = get_gemini_client()
+            response = model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature":     0.1,
+                    "max_output_tokens": 1024,
+                    "response_mime_type": "application/json",
+                }
             )
-            raw = resp.choices[0].message.content.strip()
-            # Strip markdown code fences
+            raw = response.text.strip()
             if raw.startswith("```"):
                 raw = raw.split("```")[1]
                 if raw.lower().startswith("json"):
                     raw = raw[4:]
-            parsed = json.loads(raw.strip())
+            parsed  = json.loads(raw.strip())
             elapsed = int((time.perf_counter() - t0) * 1000)
-            log.info("Groq %s — ok in %dms (attempt %d)", label, elapsed, attempt)
+            log.info("Gemini %s — ok in %dms (attempt %d)", label, elapsed, attempt)
             return parsed, retries, elapsed
         except json.JSONDecodeError as exc:
             retries += 1
-            log.warning("JSON parse error attempt %d: %s", attempt, exc)
+            log.warning("Gemini JSON parse error attempt %d: %s", attempt, exc)
             if attempt == _MAX_RETRIES:
-                raise ValueError(f"AI returned invalid JSON after {_MAX_RETRIES} attempts.")
+                raise ValueError(f"Gemini returned invalid JSON after {_MAX_RETRIES} attempts.")
+        except Exception as exc:
+            retries += 1
+            log.warning("Gemini error attempt %d: %s", attempt, exc)
+            if attempt == _MAX_RETRIES:
+                raise
+            time.sleep(_RETRY_DELAY * attempt)
+    raise ValueError("Gemini pipeline failed — all retries exhausted.")
+
+
+def _call_gemini_text(prompt: str, label: str) -> str:
+    """Call Gemini expecting plain text."""
+    model = get_gemini_client()
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config={"temperature": 0.3, "max_output_tokens": 900}
+            )
+            return response.text.strip()
+        except Exception as exc:
+            log.warning("Gemini text %s attempt %d: %s", label, attempt, exc)
+            if attempt == _MAX_RETRIES:
+                raise
+            time.sleep(_RETRY_DELAY * attempt)
+    raise ValueError("Gemini text call failed.")
+
+
+# ─────────────────────────────────────────────
+# GROQ CLIENT (FALLBACK)
+# ─────────────────────────────────────────────
+
+def get_groq_client():
+    from groq import Groq
+    key = os.getenv("GROQ_API_KEY", "").strip()
+    if not key:
+        raise ValueError("GROQ_API_KEY is not set.")
+    return Groq(api_key=key)
+
+
+def _call_groq_json(messages: list[dict], label: str) -> tuple[dict, int, int]:
+    t0      = time.perf_counter()
+    retries = 0
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            log.info("Groq %s — attempt %d", label, attempt)
+            client = get_groq_client()
+            resp   = client.chat.completions.create(
+                model=_GROQ_MODEL, max_tokens=1024, temperature=0.1, messages=messages,
+            )
+            raw = resp.choices[0].message.content.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.lower().startswith("json"):
+                    raw = raw[4:]
+            parsed  = json.loads(raw.strip())
+            elapsed = int((time.perf_counter() - t0) * 1000)
+            log.info("Groq %s — ok in %dms", label, elapsed)
+            return parsed, retries, elapsed
+        except json.JSONDecodeError as exc:
+            retries += 1
+            if attempt == _MAX_RETRIES:
+                raise ValueError(f"Groq returned invalid JSON after {_MAX_RETRIES} attempts.")
         except Exception as exc:
             retries += 1
             log.warning("Groq error attempt %d: %s", attempt, exc)
             if attempt == _MAX_RETRIES:
                 raise
             time.sleep(_RETRY_DELAY * attempt)
-
-    raise ValueError("Groq pipeline failed — all retries exhausted.")
+    raise ValueError("Groq pipeline failed.")
 
 
 def _call_groq_text(messages: list[dict], label: str) -> str:
-    """Call Groq expecting plain text back."""
     client = get_groq_client()
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
             resp = client.chat.completions.create(
-                model=_MODEL,
-                max_tokens=900,
-                temperature=0.3,
-                messages=messages,
+                model=_GROQ_MODEL, max_tokens=900, temperature=0.3, messages=messages,
             )
             return resp.choices[0].message.content.strip()
         except Exception as exc:
@@ -228,10 +292,67 @@ def _call_groq_text(messages: list[dict], label: str) -> str:
 
 
 # ─────────────────────────────────────────────
+# UNIFIED AI CALL — Gemini PRIMARY, Groq FALLBACK
+# ─────────────────────────────────────────────
+
+def _ai_call_json(
+    gemini_prompt: str,
+    groq_messages: list[dict],
+    label: str,
+    provider: str = PROVIDER_GEMINI,
+) -> tuple[dict, int, int, str]:
+    """
+    Smart dual-provider call.
+    Returns (parsed_dict, retry_count, elapsed_ms, provider_used).
+
+    provider="gemini"  → try Gemini first, fallback to Groq on error
+    provider="groq"    → use Groq directly
+    provider="auto"    → same as "gemini"
+    """
+    if provider in (PROVIDER_GEMINI, "auto"):
+        try:
+            result, retries, elapsed = _call_gemini_json(gemini_prompt, label)
+            return result, retries, elapsed, PROVIDER_GEMINI
+        except Exception as gemini_exc:
+            log.warning("Gemini failed for %s (%s) — falling back to Groq", label, gemini_exc)
+            try:
+                result, retries, elapsed = _call_groq_json(groq_messages, label + "-fallback")
+                return result, retries, elapsed, PROVIDER_GROQ
+            except Exception as groq_exc:
+                raise ValueError(
+                    f"Both Gemini and Groq failed.\n"
+                    f"Gemini: {gemini_exc}\nGroq: {groq_exc}"
+                )
+    else:
+        result, retries, elapsed = _call_groq_json(groq_messages, label)
+        return result, retries, elapsed, PROVIDER_GROQ
+
+
+def _ai_call_text(
+    gemini_prompt: str,
+    groq_messages: list[dict],
+    label: str,
+    provider: str = PROVIDER_GEMINI,
+) -> tuple[str, str]:
+    """Returns (text, provider_used)."""
+    if provider in (PROVIDER_GEMINI, "auto"):
+        try:
+            text = _call_gemini_text(gemini_prompt, label)
+            return text, PROVIDER_GEMINI
+        except Exception as exc:
+            log.warning("Gemini text failed (%s) — falling back to Groq", exc)
+            text = _call_groq_text(groq_messages, label + "-fallback")
+            return text, PROVIDER_GROQ
+    else:
+        text = _call_groq_text(groq_messages, label)
+        return text, PROVIDER_GROQ
+
+
+# ─────────────────────────────────────────────
 # PIPELINE STEP 1 — EXTRACT FACTORS
 # ─────────────────────────────────────────────
 
-_SYS_EXTRACT = (
+_EXTRACT_INSTRUCTION = (
     "You are a decision analysis expert. "
     "Read the automated decision text and extract a JSON object with these exact keys: "
     "decision_type (string), outcome (accepted/rejected/approved/denied/other), "
@@ -240,20 +361,31 @@ _SYS_EXTRACT = (
     "Return ONLY valid JSON — no markdown, no explanation."
 )
 
+_SYS_EXTRACT = _EXTRACT_INSTRUCTION  # same for both
 
-def extract_factors(decision_text: str, decision_type: str) -> tuple[dict, int, int]:
-    messages = [
+
+def extract_factors(
+    decision_text: str, decision_type: str, provider: str = PROVIDER_GEMINI
+) -> tuple[dict, int, int, str]:
+    gemini_prompt = (
+        f"{_EXTRACT_INSTRUCTION}\n\n"
+        f"Decision type hint: {decision_type}\n\nDecision text:\n{decision_text}"
+    )
+    groq_messages = [
         {"role": "system", "content": _SYS_EXTRACT},
         {"role": "user",   "content": f"Decision type hint: {decision_type}\n\nDecision text:\n{decision_text}"},
     ]
-    return _call_groq_json(messages, "STEP-1/extract")
+    result, retries, elapsed, prov = _ai_call_json(
+        gemini_prompt, groq_messages, "STEP-1/extract", provider
+    )
+    return result, retries, elapsed, prov
 
 
 # ─────────────────────────────────────────────
 # PIPELINE STEP 2 — DETECT BIAS
 # ─────────────────────────────────────────────
 
-_SYS_DETECT = (
+_DETECT_INSTRUCTION = (
     "You are a fairness and algorithmic-bias expert. "
     "Analyse the extracted decision factors for hidden bias against protected characteristics: "
     "gender, age, race, geography, name-based proxies, disability, or socioeconomic status. "
@@ -266,19 +398,23 @@ _SYS_DETECT = (
 )
 
 
-def detect_bias(extracted: dict) -> tuple[dict, int, int]:
-    messages = [
-        {"role": "system", "content": _SYS_DETECT},
-        {"role": "user",   "content": f"Extracted factors:\n{json.dumps(extracted, indent=2)}"},
+def detect_bias(
+    extracted: dict, provider: str = PROVIDER_GEMINI
+) -> tuple[dict, int, int, str]:
+    factors_json = json.dumps(extracted, indent=2)
+    gemini_prompt = f"{_DETECT_INSTRUCTION}\n\nExtracted factors:\n{factors_json}"
+    groq_messages = [
+        {"role": "system", "content": _DETECT_INSTRUCTION},
+        {"role": "user",   "content": f"Extracted factors:\n{factors_json}"},
     ]
-    return _call_groq_json(messages, "STEP-2/detect")
+    return _ai_call_json(gemini_prompt, groq_messages, "STEP-2/detect", provider)
 
 
 # ─────────────────────────────────────────────
 # PIPELINE STEP 3 — FAIR OUTCOME
 # ─────────────────────────────────────────────
 
-_SYS_FAIR = (
+_FAIR_INSTRUCTION = (
     "You are a fair-decision expert and civil-rights advisor. "
     "Given the original decision and bias evidence, determine the fair outcome. "
     "Return ONLY valid JSON with these exact keys: "
@@ -291,25 +427,29 @@ _SYS_FAIR = (
 )
 
 
-def generate_fair_outcome(extracted: dict, bias_result: dict) -> tuple[dict, int, int]:
-    messages = [
-        {"role": "system", "content": _SYS_FAIR},
-        {"role": "user",   "content": (
-            f"Original outcome: {extracted.get('outcome', 'unknown')}\n"
-            f"Criteria used: {json.dumps(extracted.get('criteria_used', []))}\n"
-            f"Bias evidence: {bias_result.get('bias_evidence', 'none')}\n"
-            f"Bias types: {json.dumps(bias_result.get('bias_types', []))}\n"
-            f"Characteristic affected: {bias_result.get('which_characteristic_affected', 'unknown')}"
-        )},
+def generate_fair_outcome(
+    extracted: dict, bias_result: dict, provider: str = PROVIDER_GEMINI
+) -> tuple[dict, int, int, str]:
+    context = (
+        f"Original outcome: {extracted.get('outcome', 'unknown')}\n"
+        f"Criteria used: {json.dumps(extracted.get('criteria_used', []))}\n"
+        f"Bias evidence: {bias_result.get('bias_evidence', 'none')}\n"
+        f"Bias types: {json.dumps(bias_result.get('bias_types', []))}\n"
+        f"Characteristic affected: {bias_result.get('which_characteristic_affected', 'unknown')}"
+    )
+    gemini_prompt = f"{_FAIR_INSTRUCTION}\n\n{context}"
+    groq_messages = [
+        {"role": "system", "content": _FAIR_INSTRUCTION},
+        {"role": "user",   "content": context},
     ]
-    return _call_groq_json(messages, "STEP-3/fair")
+    return _ai_call_json(gemini_prompt, groq_messages, "STEP-3/fair", provider)
 
 
 # ─────────────────────────────────────────────
-# QUICK SCAN — single call (faster, less detail)
+# QUICK SCAN — single call
 # ─────────────────────────────────────────────
 
-_SYS_QUICK = (
+_QUICK_INSTRUCTION = (
     "You are a bias-detection expert. In ONE call, analyse this automated decision for bias. "
     "Return ONLY valid JSON with these keys: "
     "bias_detected (boolean), bias_types (list of strings), "
@@ -322,14 +462,20 @@ _SYS_QUICK = (
 )
 
 
-def quick_scan(decision_text: str, decision_type: str) -> dict:
-    t0 = time.perf_counter()
-    result, retries, elapsed = _call_groq_json(
-        [
-            {"role": "system", "content": _SYS_QUICK},
-            {"role": "user",   "content": f"Decision type: {decision_type}\n\n{decision_text}"},
-        ],
-        "QUICK-SCAN",
+def quick_scan(
+    decision_text: str,
+    decision_type: str,
+    provider: str = PROVIDER_GEMINI,
+) -> dict:
+    t0            = time.perf_counter()
+    context       = f"Decision type: {decision_type}\n\n{decision_text}"
+    gemini_prompt = f"{_QUICK_INSTRUCTION}\n\n{context}"
+    groq_messages = [
+        {"role": "system", "content": _QUICK_INSTRUCTION},
+        {"role": "user",   "content": context},
+    ]
+    result, retries, elapsed, prov_used = _ai_call_json(
+        gemini_prompt, groq_messages, "QUICK-SCAN", provider
     )
     return {
         "id":                      str(uuid.uuid4()),
@@ -351,6 +497,7 @@ def quick_scan(decision_text: str, decision_type: str) -> dict:
         "timing_ms":               {"quick": elapsed},
         "retry_counts":            {"quick": retries},
         "mode":                    "quick",
+        "ai_provider":             prov_used,
     }
 
 
@@ -362,13 +509,17 @@ def run_full_pipeline(
     decision_text:     str,
     decision_type:     str,
     progress_callback: Optional[Callable[[int, str], None]] = None,
+    provider:          str = PROVIDER_GEMINI,
 ) -> dict:
-    text_hash = hash_text(decision_text)
-    db: Session = get_db()
+    text_hash    = hash_text(decision_text)
+    db: Session  = get_db()
+    prov_used    = provider  # track which provider was ultimately used
+
     try:
         if progress_callback:
             progress_callback(1, "Extracting decision criteria…")
-        extracted, r1, t1 = extract_factors(decision_text, decision_type)
+        extracted, r1, t1, p1 = extract_factors(decision_text, decision_type, provider)
+        prov_used = p1
 
         analysis = Analysis(
             raw_text=decision_text,
@@ -382,11 +533,15 @@ def run_full_pipeline(
 
         if progress_callback:
             progress_callback(2, "Scanning for bias patterns…")
-        bias_result, r2, t2 = detect_bias(extracted)
+        bias_result, r2, t2, p2 = detect_bias(extracted, provider)
 
         if progress_callback:
             progress_callback(3, "Generating fair outcome…")
-        fair_result, r3, t3 = generate_fair_outcome(extracted, bias_result)
+        fair_result, r3, t3, p3 = generate_fair_outcome(extracted, bias_result, provider)
+
+        # If any step fell back to Groq, mark as groq
+        if PROVIDER_GROQ in (p1, p2, p3):
+            prov_used = PROVIDER_GROQ if all(p == PROVIDER_GROQ for p in (p1, p2, p3)) else "gemini+groq"
 
         extra = {
             "bias_phrases":     bias_result.get("bias_phrases", []),
@@ -395,12 +550,9 @@ def run_full_pipeline(
             "severity":         bias_result.get("severity", "low"),
             "bias_evidence":    bias_result.get("bias_evidence", ""),
         }
-        recs_payload = {
-            "steps": fair_result.get("next_steps", []),
-            "extra": extra,
-        }
-        timing  = {"extract": t1, "detect": t2, "fair": t3, "total": t1 + t2 + t3}
-        retries = {"extract": r1, "detect": r2, "fair": r3}
+        recs_payload = {"steps": fair_result.get("next_steps", []), "extra": extra}
+        timing       = {"extract": t1, "detect": t2, "fair": t3, "total": t1 + t2 + t3}
+        retries      = {"extract": r1, "detect": r2, "fair": r3}
 
         report = Report(
             analysis_id             = analysis.id,
@@ -415,14 +567,15 @@ def run_full_pipeline(
             bias_phrases            = json.dumps(bias_result.get("bias_phrases", [])),
             timing_ms               = json.dumps(timing),
             retry_counts            = json.dumps(retries),
+            ai_provider             = prov_used,
         )
         db.add(report)
         db.commit()
         db.refresh(report)
 
         log.info(
-            "Pipeline complete — id=%s bias=%s conf=%.2f total=%dms",
-            report.id, report.bias_found, report.confidence_score, timing["total"],
+            "Pipeline complete — id=%s bias=%s conf=%.2f total=%dms provider=%s",
+            report.id, report.bias_found, report.confidence_score, timing["total"], prov_used,
         )
         return build_report_dict(report)
     finally:
@@ -433,43 +586,44 @@ def run_full_pipeline(
 # APPEAL LETTER
 # ─────────────────────────────────────────────
 
-def generate_appeal_letter(report: dict, decision_text: str, decision_type: str) -> str:
-    bias_types  = ", ".join(report.get("bias_types", [])) or "undisclosed bias"
-    affected    = report.get("affected_characteristic", "a protected characteristic")
-    explanation = report.get("explanation", "")
+def generate_appeal_letter(
+    report: dict,
+    decision_text: str,
+    decision_type: str,
+    provider: str = PROVIDER_GEMINI,
+) -> str:
+    bias_types   = ", ".join(report.get("bias_types", [])) or "undisclosed bias"
+    affected     = report.get("affected_characteristic", "a protected characteristic")
+    explanation  = report.get("explanation", "")
     fair_outcome = report.get("fair_outcome", "a fair reassessment")
-    frameworks  = report.get("legal_frameworks", [])
-    law_ref     = (", ".join(frameworks) + " and related anti-discrimination law") if frameworks else "applicable anti-discrimination law"
+    frameworks   = report.get("legal_frameworks", [])
+    law_ref      = (", ".join(frameworks) + " and related anti-discrimination law") if frameworks else "applicable anti-discrimination law"
 
-    return _call_groq_text(
-        [
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert legal writer specialising in discrimination and civil-rights cases. "
-                    "Write formal, persuasive appeal letters. "
-                    "Use [DATE], [YOUR NAME], [YOUR ADDRESS], [RECIPIENT NAME/TITLE], [ORGANISATION] as placeholders."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Write a formal appeal letter:\n\n"
-                    f"Decision type: {decision_type}\n"
-                    f"Original decision: {decision_text[:400]}\n"
-                    f"Bias detected: {bias_types}\n"
-                    f"Characteristic affected: {affected}\n"
-                    f"What was wrong: {explanation}\n"
-                    f"Fair outcome requested: {fair_outcome}\n"
-                    f"Legal frameworks: {law_ref}\n\n"
-                    "The letter should: open professionally, reference the specific decision, "
-                    "state grounds for appeal citing discriminatory factors and relevant laws, "
-                    "request a formal review, and close professionally. Under 450 words."
-                ),
-            },
-        ],
-        "APPEAL",
+    system_inst = (
+        "You are an expert legal writer specialising in discrimination and civil-rights cases. "
+        "Write formal, persuasive appeal letters. "
+        "Use [DATE], [YOUR NAME], [YOUR ADDRESS], [RECIPIENT NAME/TITLE], [ORGANISATION] as placeholders."
     )
+    user_content = (
+        f"Write a formal appeal letter:\n\n"
+        f"Decision type: {decision_type}\n"
+        f"Original decision: {decision_text[:400]}\n"
+        f"Bias detected: {bias_types}\n"
+        f"Characteristic affected: {affected}\n"
+        f"What was wrong: {explanation}\n"
+        f"Fair outcome requested: {fair_outcome}\n"
+        f"Legal frameworks: {law_ref}\n\n"
+        "The letter should: open professionally, reference the specific decision, "
+        "state grounds for appeal citing discriminatory factors and relevant laws, "
+        "request a formal review, and close professionally. Under 450 words."
+    )
+    gemini_prompt = f"{system_inst}\n\n{user_content}"
+    groq_messages = [
+        {"role": "system", "content": system_inst},
+        {"role": "user",   "content": user_content},
+    ]
+    text, _ = _ai_call_text(gemini_prompt, groq_messages, "APPEAL", provider)
+    return text
 
 
 # ─────────────────────────────────────────────
@@ -482,7 +636,6 @@ def save_feedback(report_id: str, rating: int, comment: str = "") -> bool:
         fb = Feedback(report_id=report_id, rating=rating, comment=comment.strip())
         db.add(fb)
         db.commit()
-        log.info("Feedback saved — report_id=%s rating=%d", report_id, rating)
         return True
     except Exception as exc:
         log.error("Feedback save failed: %s", exc)
@@ -545,6 +698,7 @@ def build_report_dict(report: "Report") -> dict:
         "timing_ms":               timing,
         "retry_counts":            retries,
         "mode":                    "full",
+        "ai_provider":             getattr(report, "ai_provider", "gemini") or "gemini",
     }
 
 
@@ -567,7 +721,6 @@ def get_report_by_id(report_id: str) -> Optional[dict]:
 
 
 def get_trend_data() -> list[dict]:
-    """Aggregate reports by day for trend chart."""
     db = get_db()
     try:
         rows   = db.query(Report).order_by(Report.created_at.asc()).all()
@@ -595,7 +748,6 @@ def get_trend_data() -> list[dict]:
 
 
 def get_confidence_trend(n: int = 20) -> list[float]:
-    """Last n confidence scores for sparkline."""
     db = get_db()
     try:
         rows = (
@@ -626,3 +778,23 @@ def get_all_analyses_summary() -> list[dict]:
         return result
     finally:
         db.close()
+
+
+# ─────────────────────────────────────────────
+# PROVIDER HEALTH CHECK
+# ─────────────────────────────────────────────
+
+def check_providers() -> dict:
+    """Returns status of each AI provider."""
+    status = {"gemini": False, "groq": False}
+    try:
+        get_gemini_client()
+        status["gemini"] = True
+    except Exception:
+        pass
+    try:
+        get_groq_client()
+        status["groq"] = True
+    except Exception:
+        pass
+    return status

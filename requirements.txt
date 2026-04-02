@@ -1,5 +1,5 @@
-# Verdict Watch V11 — Requirements
-# Full-stack: FastAPI backend + Streamlit frontend
+# Verdict Watch V14 — Requirements
+# Dual AI: Gemini (primary) + Groq (fallback)
 
 # ── Core API & Server
 fastapi>=0.111.0
@@ -15,7 +15,10 @@ streamlit>=1.35.0
 # ── Database
 sqlalchemy>=2.0.0
 
-# ── AI — Primary pipeline
+# ── AI — PRIMARY (Google Gemini) ─────────────────────
+google-generativeai>=0.7.0
+
+# ── AI — FALLBACK (Groq / Llama 3.3 70B) ────────────
 groq>=0.9.0
 
 # ── Charts & Data
@@ -24,4 +27,4 @@ pandas>=2.2.0
 
 # ── File parsing
 PyMuPDF          # PDF extraction  (import fitz)
-python-docx      # DOCX extraction
+python-docx      # DOCX extractions

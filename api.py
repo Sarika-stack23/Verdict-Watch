@@ -1,17 +1,11 @@
 """
-api.py — Verdict Watch V11
-FastAPI REST API.
+api.py — Verdict Watch V14
+FastAPI REST API with dual AI provider support.
 
-Run with: uvicorn api:app --reload --port 8000
-
-V11 changes:
-  - /api/analyse accepts scan_mode = "full" | "quick"
-  - /api/appeal endpoint (was in streamlit_app.py)
-  - /api/reports/{id}/feedback endpoint
-  - /api/trend  — daily trend data for dashboard
-  - /api/confidence-trend — sparkline data
-  - Cleaner Pydantic models with Optional fields
-  - Proper 422 validation errors
+V14 changes:
+  - AnalyseRequest accepts ai_provider = "gemini" | "groq" | "auto"
+  - /api/providers endpoint — health check for both providers
+  - All pipeline calls pass provider through
 """
 
 from fastapi import FastAPI, HTTPException, Query
@@ -24,8 +18,8 @@ services.init_db()
 
 app = FastAPI(
     title="Verdict Watch API",
-    description="AI-powered bias detection for automated decisions — V11",
-    version="11.0.0",
+    description="AI-powered bias detection — Gemini PRIMARY + Groq FALLBACK — V14",
+    version="14.0.0",
 )
 
 app.add_middleware(
@@ -41,9 +35,10 @@ app.add_middleware(
 # ─────────────────────────────────────────────
 
 class AnalyseRequest(BaseModel):
-    decision_text: str = Field(..., min_length=30, description="The automated decision text to analyse")
+    decision_text: str  = Field(..., min_length=30)
     decision_type: Literal["job", "loan", "medical", "university", "other"] = "other"
     scan_mode:     Literal["full", "quick"] = "full"
+    ai_provider:   Literal["gemini", "groq", "auto"] = "gemini"
 
 
 class AnalyseResponse(BaseModel):
@@ -58,25 +53,27 @@ class AnalyseResponse(BaseModel):
     confidence_score:        float
     recommendations:         list[str]
     created_at:              Optional[str]
-    bias_phrases:            list[str]           = []
-    legal_frameworks:        list[str]           = []
-    fair_reasoning:          Optional[str]       = ""
-    severity:                Optional[str]       = "low"
-    bias_evidence:           Optional[str]       = ""
-    timing_ms:               Optional[dict]      = {}
-    retry_counts:            Optional[dict]      = {}
-    mode:                    Optional[str]       = "full"
+    bias_phrases:            list[str]      = []
+    legal_frameworks:        list[str]      = []
+    fair_reasoning:          Optional[str]  = ""
+    severity:                Optional[str]  = "low"
+    bias_evidence:           Optional[str]  = ""
+    timing_ms:               Optional[dict] = {}
+    retry_counts:            Optional[dict] = {}
+    mode:                    Optional[str]  = "full"
+    ai_provider:             Optional[str]  = "gemini"
 
 
 class AppealRequest(BaseModel):
     report_id:     str
     decision_text: str
-    decision_type: str = "other"
+    decision_type: str  = "other"
+    ai_provider:   Literal["gemini", "groq", "auto"] = "gemini"
 
 
 class FeedbackRequest(BaseModel):
-    rating:  int   = Field(..., ge=0, le=1)
-    comment: str   = ""
+    rating:  int  = Field(..., ge=0, le=1)
+    comment: str  = ""
 
 
 # ─────────────────────────────────────────────
@@ -92,11 +89,13 @@ def analyse_decision(payload: AnalyseRequest):
             report = services.quick_scan(
                 decision_text=payload.decision_text,
                 decision_type=payload.decision_type,
+                provider=payload.ai_provider,
             )
         else:
             report = services.run_full_pipeline(
                 decision_text=payload.decision_text,
                 decision_type=payload.decision_type,
+                provider=payload.ai_provider,
             )
         return report
     except ValueError as exc:
@@ -119,6 +118,7 @@ def generate_appeal(payload: AppealRequest):
             report=report,
             decision_text=payload.decision_text,
             decision_type=payload.decision_type,
+            provider=payload.ai_provider,
         )
         return {"letter": letter}
     except Exception as exc:
@@ -132,8 +132,7 @@ def generate_appeal(payload: AppealRequest):
 @app.get("/api/reports", tags=["Reports"])
 def list_reports(limit: int = Query(default=200, le=500)):
     try:
-        reports = services.get_all_reports()
-        return reports[:limit]
+        return services.get_all_reports()[:limit]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -178,6 +177,20 @@ def confidence_trend(n: int = Query(default=20, le=100)):
 
 
 # ─────────────────────────────────────────────
+# PROVIDERS
+# ─────────────────────────────────────────────
+
+@app.get("/api/providers", tags=["Health"])
+def provider_status():
+    """Check which AI providers are available."""
+    status = services.check_providers()
+    return {
+        "gemini": {"available": status["gemini"], "model": services._GEMINI_MODEL, "role": "primary"},
+        "groq":   {"available": status["groq"],   "model": services._GROQ_MODEL,   "role": "fallback"},
+    }
+
+
+# ─────────────────────────────────────────────
 # HEALTH
 # ─────────────────────────────────────────────
 
@@ -191,12 +204,14 @@ def health_check():
     except Exception as exc:
         db_status = f"error: {exc}"
 
-    groq_status = "key_present" if services.os.getenv("GROQ_API_KEY") else "key_missing"
+    providers = services.check_providers()
 
     return {
-        "status":   "ok",
-        "database": db_status,
-        "groq":     groq_status,
-        "model":    services._MODEL,
-        "version":  "11.0.0",
+        "status":          "ok",
+        "database":        db_status,
+        "gemini":          "key_present" if providers["gemini"] else "key_missing",
+        "groq":            "key_present" if providers["groq"]   else "key_missing",
+        "primary_model":   services._GEMINI_MODEL,
+        "fallback_model":  services._GROQ_MODEL,
+        "version":         "14.0.0",
     }
