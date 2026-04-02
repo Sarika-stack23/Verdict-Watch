@@ -395,6 +395,7 @@ VIEWS = [
     ("analyse","⚡","Analyse"),
     ("models","⊕","Model Selector"),
     ("dashboard","◎","Dashboard"),
+    ("fairness","◈","Fairness Metrics"),
     ("history","▤","History"),
     ("batch","⊞","Batch"),
     ("test","⊘","Test Suite"),
@@ -709,12 +710,13 @@ def chart_gauge(val, bias):
 # ══════════════════════════════════════════════════════
 
 def _render_steps(ph, current, label):
-    steps = [(1,"EXTRACT"),(2,"DETECT"),(3,"GENERATE")]
+    # V15: 6 steps including governance layer
+    steps = [(0,"SCAN"),(1,"EXTRACT"),(2,"DETECT"),(3,"GENERATE"),(4,"FAIRNESS"),(5,"EXPLAIN")]
     parts = []
     for num, lbl in steps:
-        if num < current:   cls, ico = "ss-done", "✓"
+        if num < current:    cls, ico = "ss-done", "✓"
         elif num == current: cls, ico = "ss-active", "⟳"
-        else:               cls, ico = "", str(num)
+        else:                cls, ico = "", str(num)
         parts.append(f'<div class="ss-i {cls}"><div class="ss-lbl">{ico} {lbl}</div></div>')
     ph.markdown(
         f'<div class="ss">{"".join(parts)}</div>'
@@ -854,6 +856,158 @@ def render_result(report, dt, dtype, compact=False):
                 st.markdown(
                     f'<div class="rec"><div class="rec-n">{i}</div><div class="rec-t">{rec}</div></div>',
                     unsafe_allow_html=True)
+
+        # ── V15: FAIRNESS AUDIT PANEL ──────────────────────────────
+        fairness = report.get("fairness_scores", {})
+        if fairness and isinstance(fairness, dict) and "overall_fairness_score" in fairness:
+            st.markdown('<hr class="div">', unsafe_allow_html=True)
+            st.markdown('<div class="lbl">◈ AI Governance — Fairness Audit</div>', unsafe_allow_html=True)
+            fs_score   = fairness.get("overall_fairness_score", 0)
+            fs_verdict = fairness.get("fairness_verdict", "unfair")
+            fs_summary = fairness.get("audit_summary", "")
+            verdict_cls = {"fair":"card-ok","partially_fair":"card-warn","unfair":"card-err"}.get(fs_verdict,"card-warn")
+            verdict_lbl = {"fair":"✓ Fair","partially_fair":"⚠ Partially Fair","unfair":"✗ Unfair"}.get(fs_verdict,"⚠ Partially Fair")
+
+            fa1, fa2 = st.columns([1, 2], gap="small")
+            with fa1:
+                # Fairness score ring
+                r_   = 38; cx_ = cy_ = 55; sw_ = 10
+                circ_ = 2 * 3.14159 * r_
+                dash_ = circ_ * fs_score / 100; gap_ = circ_ - dash_
+                col_  = tok("--green") if fs_score >= 70 else (tok("--amber") if fs_score >= 40 else tok("--red"))
+                st.markdown(
+                    f'<div class="card" style="text-align:center;">'
+                    f'<div class="card-lbl">Overall Fairness Score</div>'
+                    f'<svg width="110" height="110" viewBox="0 0 110 110">'
+                    f'<circle cx="{cx_}" cy="{cy_}" r="{r_}" fill="none" stroke="{tok("--surf3")}" stroke-width="{sw_}"/>'
+                    f'<circle cx="{cx_}" cy="{cy_}" r="{r_}" fill="none" stroke="{col_}" stroke-width="{sw_}"'
+                    f' stroke-dasharray="{dash_:.1f} {gap_:.1f}" stroke-linecap="round" transform="rotate(-90 {cx_} {cy_})"/>'
+                    f'<text x="{cx_}" y="{cy_-4}" text-anchor="middle" font-family="JetBrains Mono,monospace"'
+                    f' font-size="18" font-weight="600" fill="{col_}">{fs_score}</text>'
+                    f'<text x="{cx_}" y="{cy_+12}" text-anchor="middle" font-family="Syne,sans-serif"'
+                    f' font-size="8" font-weight="700" fill="{tok("--t3")}" letter-spacing="0.08em">/100</text>'
+                    f'</svg>'
+                    f'<div class="card {verdict_cls}" style="margin-top:6px;padding:4px 8px;text-align:center;">'
+                    f'<div class="card-val" style="font-size:.78rem;font-weight:700;">{verdict_lbl}</div></div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+            with fa2:
+                # Demographic parity scores per characteristic
+                parity = fairness.get("demographic_parity_scores", {})
+                if parity:
+                    bars_html = ""
+                    for char, score in parity.items():
+                        score = int(score)
+                        bar_col = tok("--green") if score >= 70 else (tok("--amber") if score >= 40 else tok("--red"))
+                        bars_html += (
+                            f'<div style="margin-bottom:8px;">'
+                            f'<div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:3px;">'
+                            f'<span style="color:var(--t2);">{char.replace("_"," ").title()}</span>'
+                            f'<span style="color:{bar_col};font-weight:700;font-family:var(--ff-m);">{score}%</span></div>'
+                            f'<div style="height:5px;background:var(--surf3);border-radius:3px;">'
+                            f'<div style="width:{score}%;height:100%;background:{bar_col};border-radius:3px;"></div></div>'
+                            f'</div>'
+                        )
+                    st.markdown(
+                        f'<div class="card"><div class="card-lbl">Demographic Parity Scores</div>'
+                        f'<div style="margin-top:8px;">{bars_html}</div></div>',
+                        unsafe_allow_html=True)
+                if fs_summary:
+                    st.markdown(
+                        f'<div class="card card-info" style="margin-top:6px;">'
+                        f'<div class="card-lbl">Audit Summary</div>'
+                        f'<div class="card-val" style="font-size:.82rem;">{fs_summary}</div></div>',
+                        unsafe_allow_html=True)
+
+            # Counterfactual findings
+            cf = fairness.get("counterfactual_findings", [])
+            if cf:
+                st.markdown('<div class="lbl" style="margin-top:10px;">Counterfactual Findings</div>', unsafe_allow_html=True)
+                for f_ in cf:
+                    would_change = f_.get("would_outcome_change", False)
+                    change_cls   = "card-err" if would_change else "card-ok"
+                    change_lbl   = "⚠ Outcome would change" if would_change else "✓ Outcome unchanged"
+                    st.markdown(
+                        f'<div class="card {change_cls}" style="margin-bottom:5px;">'
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+                        f'<span style="font-size:.78rem;font-weight:700;">{f_.get("characteristic","").title()} — {f_.get("hypothetical_change","")}</span>'
+                        f'<span style="font-size:.7rem;font-weight:700;">{change_lbl}</span></div>'
+                        f'<div style="font-size:.75rem;color:var(--t2);">{f_.get("reasoning","")}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True)
+
+        # ── V15: EXPLAINABILITY TRACE ──────────────────────────────
+        explain = report.get("explainability_trace", {})
+        if explain and isinstance(explain, dict) and explain.get("reasoning_chain"):
+            st.markdown('<hr class="div">', unsafe_allow_html=True)
+            st.markdown('<div class="lbl">◈ AI Governance — Explainability Trace</div>', unsafe_allow_html=True)
+
+            root   = explain.get("root_cause", "")
+            retro  = explain.get("retroactive_correction", "")
+            correct= explain.get("corrective_action", "")
+            if root:
+                st.markdown(
+                    f'<div class="card card-err"><div class="card-lbl">Root Cause</div>'
+                    f'<div class="card-val" style="font-size:.83rem;">{root}</div></div>',
+                    unsafe_allow_html=True)
+
+            chain = explain.get("reasoning_chain", [])
+            if chain:
+                st.markdown('<div class="lbl" style="margin-top:8px;">Phrase-Level Reasoning Chain</div>', unsafe_allow_html=True)
+                for step in chain:
+                    step_n = step.get("step", "")
+                    phrase = step.get("phrase", "")
+                    char_t = step.get("characteristic_triggered", "")
+                    law    = step.get("legal_violation", "")
+                    why    = step.get("why_this_matters", "")
+                    st.markdown(
+                        f'<div class="card" style="margin-bottom:5px;border-left:3px solid var(--red);">'
+                        f'<div style="display:flex;gap:8px;align-items:flex-start;">'
+                        f'<div style="background:var(--red-lt);color:var(--red);border-radius:5px;padding:2px 7px;'
+                        f'font-family:var(--ff-m);font-size:.65rem;font-weight:700;flex-shrink:0;">Step {step_n}</div>'
+                        f'<div style="flex:1;">'
+                        f'<div style="font-family:var(--ff-m);font-size:.75rem;color:var(--red);margin-bottom:3px;">"{phrase}"</div>'
+                        f'<div style="font-size:.73rem;color:var(--t2);">Triggers: <strong>{char_t}</strong> · Violates: {law}</div>'
+                        f'<div style="font-size:.72rem;color:var(--t3);margin-top:2px;">{why}</div>'
+                        f'</div></div></div>',
+                        unsafe_allow_html=True)
+
+            if retro:
+                st.markdown(
+                    f'<div class="card card-ok" style="margin-top:6px;">'
+                    f'<div class="card-lbl">Retroactive Correction</div>'
+                    f'<div class="card-val" style="font-size:.82rem;">{retro}</div></div>',
+                    unsafe_allow_html=True)
+            if correct:
+                st.markdown(
+                    f'<div class="card card-info" style="margin-top:6px;">'
+                    f'<div class="card-lbl">What the decision-maker should have done</div>'
+                    f'<div class="card-val" style="font-size:.82rem;">{correct}</div></div>',
+                    unsafe_allow_html=True)
+
+        # ── V15: CHARACTERISTIC WEIGHT CHART ───────────────────────
+        cw = report.get("characteristic_weights", {})
+        if cw and isinstance(cw, dict) and len(cw) > 0:
+            st.markdown('<hr class="div">', unsafe_allow_html=True)
+            st.markdown('<div class="lbl">◈ Pre-Decision Characteristic Influence Weights</div>', unsafe_allow_html=True)
+            bars_html = ""
+            for char, weight in sorted(cw.items(), key=lambda x: -x[1]):
+                weight = int(weight)
+                bar_col = tok("--red") if weight >= 60 else (tok("--amber") if weight >= 30 else tok("--green"))
+                risk_lbl = "High influence" if weight >= 60 else ("Medium" if weight >= 30 else "Low")
+                bars_html += (
+                    f'<div style="margin-bottom:9px;">'
+                    f'<div style="display:flex;justify-content:space-between;font-size:.73rem;margin-bottom:3px;">'
+                    f'<span style="color:var(--t1);font-weight:600;">{char.replace("_"," ").title()}</span>'
+                    f'<span style="color:{bar_col};font-weight:700;font-family:var(--ff-m);">{weight}% · {risk_lbl}</span></div>'
+                    f'<div style="height:6px;background:var(--surf3);border-radius:3px;">'
+                    f'<div style="width:{weight}%;height:100%;background:{bar_col};border-radius:3px;transition:width .4s;"></div></div>'
+                    f'</div>'
+                )
+            st.markdown(
+                f'<div class="card"><div class="card-lbl">How much each characteristic influenced the decision (0–100%)</div>'
+                f'<div style="margin-top:10px;">{bars_html}</div></div>',
+                unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════
 # INJECT CSS + SIDEBAR
@@ -1536,6 +1690,135 @@ elif view == "history":
                     mime="text/plain", key=f"dl_{r.get('id','x')}")
 
 # ─────────────────────────────────────────────────────
+# FAIRNESS METRICS VIEW (NEW V15)
+# ─────────────────────────────────────────────────────
+elif view == "fairness":
+    st.markdown('<div class="ph">Fairness Metrics</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ps">AI governance layer — aggregate fairness audit across all analysed decisions.</div>', unsafe_allow_html=True)
+
+    hist = all_reports()
+    if not hist:
+        st.markdown(
+            '<div class="empty"><div class="empty-ico">◈</div>'
+            '<div class="empty-t">No data yet</div>'
+            '<div class="empty-s">Run at least one Full analysis to populate fairness metrics.</div></div>',
+            unsafe_allow_html=True)
+    else:
+        import services as _svc
+        report_data = _svc.generate_model_bias_report(hist)
+
+        avg_fs   = report_data.get("avg_fairness_score")
+        verdicts = report_data.get("fairness_verdicts", {})
+        dim_par  = report_data.get("dim_parity_scores", {})
+        avg_cw   = report_data.get("avg_char_weights", {})
+        bias_rate= report_data.get("bias_rate", 0)
+        total    = report_data.get("total_decisions", 0)
+        biased   = report_data.get("biased_decisions", 0)
+
+        # Top metrics
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Decisions Audited", total)
+        k2.metric("Bias Rate", f"{bias_rate}%")
+        k3.metric("Avg Fairness Score", f"{avg_fs}/100" if avg_fs is not None else "N/A")
+        fair_pct = round(verdicts.get("fair", 0) / total * 100) if total else 0
+        k4.metric("Decisions Ruled Fair", f"{fair_pct}%")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        vm1, vm2 = st.columns(2, gap="large")
+        with vm1:
+            st.markdown('<div class="lbl">Fairness Verdict Distribution</div>', unsafe_allow_html=True)
+            verdict_labels = {"fair": "✓ Fair", "partially_fair": "⚠ Partially Fair", "unfair": "✗ Unfair"}
+            verdict_colors = {"fair": tok("--green"), "partially_fair": tok("--amber"), "unfair": tok("--red")}
+            rows_html = ""
+            for key, label in verdict_labels.items():
+                count = verdicts.get(key, 0)
+                pct_  = round(count / total * 100) if total else 0
+                col_  = verdict_colors[key]
+                rows_html += (
+                    f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+                    f'<span style="min-width:130px;font-size:.82rem;color:var(--t1);">{label}</span>'
+                    f'<div style="flex:1;height:8px;background:var(--surf3);border-radius:4px;">'
+                    f'<div style="width:{pct_}%;height:100%;background:{col_};border-radius:4px;"></div></div>'
+                    f'<span style="font-family:var(--ff-m);font-size:.78rem;color:{col_};min-width:50px;text-align:right;">'
+                    f'{count} ({pct_}%)</span></div>'
+                )
+            st.markdown(f'<div class="card">{rows_html}</div>', unsafe_allow_html=True)
+
+        with vm2:
+            st.markdown('<div class="lbl">Average Characteristic Influence Weights</div>', unsafe_allow_html=True)
+            if avg_cw:
+                bars_html = ""
+                for char, w in sorted(avg_cw.items(), key=lambda x: -x[1]):
+                    w = int(w)
+                    bc = tok("--red") if w >= 60 else (tok("--amber") if w >= 30 else tok("--green"))
+                    bars_html += (
+                        f'<div style="margin-bottom:8px;">'
+                        f'<div style="display:flex;justify-content:space-between;font-size:.72rem;margin-bottom:3px;">'
+                        f'<span style="color:var(--t2);">{char.replace("_"," ").title()}</span>'
+                        f'<span style="color:{bc};font-weight:700;font-family:var(--ff-m);">{w}%</span></div>'
+                        f'<div style="height:5px;background:var(--surf3);border-radius:3px;">'
+                        f'<div style="width:{w}%;height:100%;background:{bc};border-radius:3px;"></div></div>'
+                        f'</div>'
+                    )
+                st.markdown(f'<div class="card">{bars_html}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="card card-muted"><div class="card-val" style="font-size:.82rem;">Run Full analyses to populate characteristic weights.</div></div>', unsafe_allow_html=True)
+
+        if dim_par:
+            st.markdown('<br>', unsafe_allow_html=True)
+            st.markdown('<div class="lbl">Demographic Parity Scores (avg across all decisions)</div>', unsafe_allow_html=True)
+            bars2 = ""
+            for char, score in sorted(dim_par.items(), key=lambda x: x[1]):
+                score = int(score)
+                bc = tok("--green") if score >= 70 else (tok("--amber") if score >= 40 else tok("--red"))
+                risk = "High risk" if score < 40 else ("Medium risk" if score < 70 else "Low risk")
+                bars2 += (
+                    f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">'
+                    f'<span style="min-width:160px;font-size:.82rem;color:var(--t1);">{char.replace("_"," ").title()}</span>'
+                    f'<div style="flex:1;height:8px;background:var(--surf3);border-radius:4px;">'
+                    f'<div style="width:{score}%;height:100%;background:{bc};border-radius:4px;"></div></div>'
+                    f'<span style="font-family:var(--ff-m);font-size:.78rem;color:{bc};min-width:100px;text-align:right;">'
+                    f'{score}/100 · {risk}</span></div>'
+                )
+            st.markdown(f'<div class="card">{bars2}</div>', unsafe_allow_html=True)
+
+        # Per-report fairness breakdown
+        st.markdown('<br>', unsafe_allow_html=True)
+        st.markdown('<div class="lbl">Per-Decision Fairness Breakdown</div>', unsafe_allow_html=True)
+        for r in hist:
+            fs = r.get("fairness_scores", {})
+            if not fs or not isinstance(fs, dict): continue
+            fs_score_r  = fs.get("overall_fairness_score")
+            if fs_score_r is None: continue
+            verdict_r   = fs.get("fairness_verdict", "")
+            created_r   = (r.get("created_at") or "")[:10]
+            aff_r       = _trunc(r.get("affected_characteristic") or "—", 20)
+            vcls_r      = {"fair":"card-ok","partially_fair":"card-warn","unfair":"card-err"}.get(verdict_r,"card-muted")
+            vlbl_r      = {"fair":"✓ Fair","partially_fair":"⚠ Partial","unfair":"✗ Unfair"}.get(verdict_r,"—")
+            col_r       = tok("--green") if fs_score_r >= 70 else (tok("--amber") if fs_score_r >= 40 else tok("--red"))
+            st.markdown(
+                f'<div class="card {vcls_r}" style="margin-bottom:5px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+                f'<div>'
+                f'<div style="font-size:.8rem;font-weight:700;color:var(--t1);">{aff_r.title()} · {created_r}</div>'
+                f'<div style="font-size:.7rem;color:var(--t3);margin-top:2px;">{", ".join(r.get("bias_types",[]))[:60] or "No bias types"}</div>'
+                f'</div>'
+                f'<div style="text-align:right;">'
+                f'<div style="font-family:var(--ff-m);font-size:1.1rem;font-weight:700;color:{col_r};">{fs_score_r}/100</div>'
+                f'<div style="font-size:.7rem;font-weight:700;">{vlbl_r}</div>'
+                f'</div></div></div>',
+                unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        dl1, _ = st.columns([1, 4])
+        with dl1:
+            st.download_button("↓ Export Fairness Report (CSV)",
+                data=to_csv(hist),
+                file_name=f"fairness_report_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv", key="fairness_dl")
+
+# ─────────────────────────────────────────────────────
 # BATCH
 # ─────────────────────────────────────────────────────
 elif view == "batch":
@@ -1844,12 +2127,16 @@ elif view == "settings":
             f'<div class="card-val mono">{fb["total"]} ratings · {fb["helpful_pct"]}% helpful</div></div>',
             unsafe_allow_html=True)
 
-        st.markdown('<div class="lbl" style="margin-top:14px;">V14 Features</div>', unsafe_allow_html=True)
+        st.markdown('<div class="lbl" style="margin-top:14px;">V15 Features</div>', unsafe_allow_html=True)
         for ico, name, desc in [
             ("🔵","Gemini Primary","gemini-1.5-flash + all Gemini models"),
             ("🟠","Groq Fallback","7 Groq models incl. DeepSeek R1"),
             ("⊕","Model Selector","Full model picker with live switching"),
             ("✦","Auto Fallback","Gemini → Groq if API call fails"),
+            ("◈","Pre-Decision Scan","Scans characteristics before analysis"),
+            ("◈","Fairness Audit","Counterfactual parity across demographics"),
+            ("◈","Explainability Trace","Phrase-level AI governance chain"),
+            ("◈","Fairness Metrics","Aggregate governance dashboard"),
             ("◎","Provider Tracking","Each report stores which AI was used"),
             ("⊞","Batch Multi-model","Batch runs use selected model"),
             ("⊘","Test Suite","Model shown per test result"),
@@ -1866,14 +2153,18 @@ elif view == "settings":
 # ─────────────────────────────────────────────────────
 elif view == "about":
     st.markdown('<div class="ph">About Verdict Watch</div>', unsafe_allow_html=True)
-    st.markdown('<div class="ps">Enterprise AI bias detection. V14 — Dual AI Edition. Gemini PRIMARY · Groq FALLBACK.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ps">Enterprise AI bias detection. V15 — AI Governance Edition. Gemini PRIMARY · Groq FALLBACK.</div>', unsafe_allow_html=True)
 
     ab1, ab2 = st.columns([1.6,1], gap="large")
     with ab1:
         st.markdown(
             '<div class="card" style="background:var(--surf2);margin-bottom:12px;">'
             '<div style="font-family:var(--ff-d);font-size:1.1rem;color:var(--t1);margin-bottom:6px;">What is Verdict Watch?</div>'
-            '<div style="font-size:.82rem;color:var(--t2);line-height:1.75;">A 3-step pipeline using Google Gemini (primary) with Groq fallback — extracting decision criteria, detecting discriminatory patterns across 7 bias dimensions, citing relevant laws, and generating the fair outcome you deserved.</div></div>',
+            '<div style="font-size:.82rem;color:var(--t2);line-height:1.75;">A 5-step AI governance pipeline using Google Gemini (primary) with Groq fallback — '
+            'pre-scanning decisions for protected characteristics, extracting decision criteria, '
+            'detecting discriminatory patterns across 7 bias dimensions, running a counterfactual fairness audit, '
+            'generating an explainability trace with phrase-level reasoning, citing relevant laws, '
+            'and producing the fair outcome the applicant deserved.</div></div>',
             unsafe_allow_html=True)
 
         st.markdown('<div class="lbl">AI Models Available</div>', unsafe_allow_html=True)
@@ -1934,5 +2225,5 @@ elif view == "about":
             unsafe_allow_html=True)
         st.markdown(
             '<div style="text-align:center;font-size:.68rem;color:var(--t3);margin-top:12px;">'
-            'Verdict Watch V14 · Gemini PRIMARY + Groq FALLBACK</div>',
+            'Verdict Watch V15 · AI Governance Edition · Gemini PRIMARY + Groq FALLBACK</div>',
             unsafe_allow_html=True)
