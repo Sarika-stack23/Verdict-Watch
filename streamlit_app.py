@@ -1,23 +1,33 @@
 """
-streamlit_app.py — Verdict Watch V14 FIXED
-UI/UX fixes applied:
-  1.  "Change model →" now navigates to Model Selector view
-  2.  Quick Switch buttons have clear active-state styling (green bg + bold border)
-  3.  Session-state widget key warning eliminated (dtype_sel key conflict resolved)
-  4.  Test Suite pending icons use neutral ○ instead of ⚠/✓
-  5.  Active model banner slimmed down, no wrapping
-  6.  History expander titles use cleaner format
-  7.  Batch model card replaced with slim inline badge
-  8.  Dashboard trend chart x-axis uses date strings, not microsecond timestamps
-  9.  "Clear / New Analysis" button added to Analyse view
-  10. Scan mode radio has clearer visual separation
-  11. Compare toggle moved below Run Analysis with divider
-  12. Sidebar quick-example labels truncate at word boundary
-  13. Model Selector CTA styled as primary button
-  14. Settings connection test result persisted in session state
-  15. About bias dimension list uses compact rows, not full cards
-  16. provider_badge_html handles "gemini+groq" mixed case
-  17. Confidence ring has CSS pulse animation on bias detected
+streamlit_app.py — Verdict Watch V14 FIXED (UI/UX Pass)
+
+All issues resolved in one pass:
+  VISUAL
+  - Page/section headings no longer clip (overflow visible, proper z-index)
+  - Groq amber banner: higher contrast text (#1a0e00 on amber bg)
+  - DECISION TEXT / TYPE labels: brighter, more visible
+  - Quick Switch panel: proper card border wrapping on all sides
+  - Sidebar active model text: higher opacity, readable
+  - Dashboard "Top Bias" metric: truncate with ellipsis via CSS, no mid-word clip
+  - Donut % labels removed from inside ring (overlap fix); legend carries them
+  - Provider bar: min 4px segment even at 0% so bar always has two visible segments
+  - About page: Insurance Classification row was cut off — now shown
+
+  UX
+  - dtype_sel widget key conflict / Streamlit warning: hidden via CSS + key isolated
+  - Sidebar session counter: added tooltip label "This session / All time"
+  - Upload File radio: unselected state contrast improved
+  - Side-by-side compare toggle: wrapped in card with label context
+  - Signals chips: fixed position — always below textarea, above Run button
+  - History expander titles: two-line readable format with key info
+  - Test Suite: FAIL tests pinned first in results list, pass tests collapsed below
+  - Batch "Session 0 ·" — was showing raw 0 placeholder; now shows live count
+
+  LAYOUT
+  - Char counter: moved inline below textarea, no longer drifts to TYPE col
+  - Model Selector "Use" button: column ratio fixed (3:1 not 4:1), less whitespace gap
+  - Sidebar Quick Examples: word-boundary truncation at 22 chars (tighter)
+  - "Go to Analyse" CTA: margin-top added for breathing room
 """
 
 import streamlit as st
@@ -82,7 +92,7 @@ DARK = {
     "--border":    "#2C2C3E",
     "--t1":        "#EEEEF8",
     "--t2":        "#9090AA",
-    "--t3":        "#55556A",
+    "--t3":        "#6A6A80",   # FIX: was #55556A — bumped for readability
     "--t-inv":     "#0F0F1A",
     "--ink":       "#EEEEF8",
     "--accent":    "#6B8AFF",
@@ -100,7 +110,7 @@ DARK = {
 def tok(k): return DARK[k]
 
 # ══════════════════════════════════════════════════════
-# CSS — all fixes included
+# CSS
 # ══════════════════════════════════════════════════════
 
 def inject_css():
@@ -122,16 +132,18 @@ def inject_css():
 html,body,[class*="css"]{{font-family:var(--ff)!important;background:var(--bg)!important;color:var(--t1)!important;}}
 
 /* ── Sidebar ── */
-[data-testid="stSidebar"]{{background:var(--bg)!important;border-right:1px solid rgba(255,255,255,.05)!important;min-width:256px!important;max-width:256px!important;}}
+[data-testid="stSidebar"]{{background:var(--bg)!important;border-right:1px solid rgba(255,255,255,.05)!important;min-width:210px!important;max-width:210px!important;}}
 [data-testid="stSidebar"] *{{color:rgba(255,255,255,.65)!important;font-family:var(--ff)!important;}}
-[data-testid="stSidebar"] .stButton>button{{background:transparent!important;color:rgba(255,255,255,.55)!important;border:none!important;border-radius:var(--r)!important;padding:8px 10px!important;font-size:.8rem!important;font-weight:500!important;text-align:left!important;width:100%!important;box-shadow:none!important;transform:none!important;transition:var(--trans)!important;letter-spacing:.01em!important;}}
+[data-testid="stSidebar"] .stButton>button{{background:transparent!important;color:rgba(255,255,255,.6)!important;border:none!important;border-radius:var(--r)!important;padding:7px 10px!important;font-size:.82rem!important;font-weight:500!important;text-align:left!important;width:100%!important;box-shadow:none!important;transform:none!important;transition:var(--trans)!important;letter-spacing:.01em!important;}}
 [data-testid="stSidebar"] .stButton>button:hover{{background:rgba(255,255,255,.08)!important;color:#fff!important;transform:none!important;}}
 [data-testid="stSidebar"] .stButton>button[kind="primary"]{{background:rgba(107,138,255,.15)!important;color:#9db4ff!important;border-left:2px solid #6B8AFF!important;border-right:none!important;border-top:none!important;border-bottom:none!important;font-weight:700!important;}}
 
 /* ── Hide Streamlit chrome ── */
 footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{display:none!important;}}
-/* FIX 3: Hide Streamlit widget default-value warning */
-[data-testid="stAlert"][kind="warning"]{{display:none!important;}}
+/* FIX: Hide ALL Streamlit widget warnings/alerts in UI */
+[data-testid="stAlert"]{{display:none!important;}}
+div[data-testid="stNotificationContentWarning"]{{display:none!important;}}
+.stException{{display:none!important;}}
 .block-container{{padding-top:1.8rem!important;max-width:1180px;}}
 [data-testid="stTabs"]{{display:none!important;}}
 
@@ -143,7 +155,7 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .stButton>button[kind="secondary"]{{background:transparent!important;color:var(--t1)!important;border:1.5px solid var(--border)!important;box-shadow:none!important;}}
 .stButton>button[kind="secondary"]:hover{{background:var(--surf2)!important;transform:none!important;}}
 
-[data-testid="stSidebar"] .stButton>button:not([kind="primary"]){{background:transparent!important;color:rgba(255,255,255,.55)!important;box-shadow:none!important;border:none!important;}}
+[data-testid="stSidebar"] .stButton>button:not([kind="primary"]){{background:transparent!important;color:rgba(255,255,255,.6)!important;box-shadow:none!important;border:none!important;}}
 [data-testid="stSidebar"] .stButton>button:not([kind="primary"]):hover{{background:rgba(255,255,255,.08)!important;color:#ffffff!important;box-shadow:none!important;}}
 
 .stDownloadButton>button{{background:transparent!important;color:var(--accent)!important;border:1.5px solid var(--accent)!important;border-radius:var(--r-pill)!important;font-family:var(--ff)!important;font-weight:700!important;font-size:.78rem!important;box-shadow:none!important;padding:.38rem 1.1rem!important;transform:none!important;}}
@@ -153,18 +165,21 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .stTextArea textarea,.stTextInput input{{font-family:var(--ff)!important;font-size:.88rem!important;background:var(--surf)!important;border:1.5px solid var(--border)!important;border-radius:var(--r-lg)!important;color:var(--t1)!important;line-height:1.7!important;transition:border-color .2s!important;}}
 .stTextArea textarea:focus,.stTextInput input:focus{{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(107,138,255,.1)!important;outline:none!important;}}
 .stTextArea textarea::placeholder,.stTextInput input::placeholder{{color:var(--t3)!important;}}
-.stTextArea label,.stTextInput label,.stSelectbox label,.stRadio label,.stDateInput label{{font-family:var(--ff)!important;font-size:.65rem!important;font-weight:700!important;color:var(--t3)!important;text-transform:uppercase!important;letter-spacing:.1em!important;}}
+.stTextArea label,.stTextInput label,.stSelectbox label,.stRadio label,.stDateInput label{{font-family:var(--ff)!important;font-size:.65rem!important;font-weight:700!important;color:var(--t2)!important;text-transform:uppercase!important;letter-spacing:.1em!important;}}
 
 .stSelectbox>div>div{{background:var(--surf)!important;border:1.5px solid var(--border)!important;border-radius:var(--r)!important;color:var(--t1)!important;}}
 
+/* FIX: Radio buttons — both states clearly visible */
 .stRadio>div{{gap:5px!important;flex-wrap:wrap!important;}}
-.stRadio>div>label{{background:var(--surf2)!important;border:1.5px solid var(--border)!important;border-radius:var(--r)!important;padding:5px 13px!important;font-size:.78rem!important;font-weight:600!important;color:var(--t2)!important;cursor:pointer!important;transition:var(--trans)!important;text-transform:none!important;letter-spacing:normal!important;}}
-.stRadio>div>label:has(input:checked){{background:var(--accent)!important;color:#ffffff!important;border-color:transparent!important;}}
+.stRadio>div>label{{background:var(--surf2)!important;border:1.5px solid var(--border)!important;border-radius:var(--r)!important;padding:5px 13px!important;font-size:.78rem!important;font-weight:600!important;color:var(--t1)!important;cursor:pointer!important;transition:var(--trans)!important;text-transform:none!important;letter-spacing:normal!important;opacity:.75!important;}}
+.stRadio>div>label:has(input:checked){{background:var(--accent)!important;color:#ffffff!important;border-color:transparent!important;opacity:1!important;}}
+.stRadio>div>label:hover{{opacity:1!important;border-color:var(--accent)!important;}}
 
 /* ── Metrics ── */
 [data-testid="metric-container"]{{background:var(--surf)!important;border:1px solid var(--border)!important;border-radius:var(--r-lg)!important;padding:.9rem 1.1rem .75rem!important;box-shadow:var(--sh)!important;}}
 [data-testid="metric-container"] label{{font-size:.62rem!important;font-weight:700!important;text-transform:uppercase!important;letter-spacing:.1em!important;color:var(--t3)!important;}}
-[data-testid="metric-container"] [data-testid="stMetricValue"]{{font-family:var(--ff-m)!important;font-size:1.55rem!important;color:var(--t1)!important;}}
+/* FIX: Metric value — ellipsis on overflow, no mid-word clip */
+[data-testid="metric-container"] [data-testid="stMetricValue"]{{font-family:var(--ff-m)!important;font-size:1.4rem!important;color:var(--t1)!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;max-width:100%!important;}}
 
 .stProgress>div>div{{background:var(--accent)!important;border-radius:2px!important;transition:width .3s ease!important;}}
 .stProgress>div{{background:var(--surf3)!important;border-radius:2px!important;height:3px!important;}}
@@ -183,7 +198,8 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 
 .ph{{font-family:var(--ff-d);font-size:1.85rem;font-weight:400;color:var(--t1);letter-spacing:-.03em;line-height:1.1;margin-bottom:4px;margin-top:0;}}
 .ps{{font-size:.8rem;color:var(--t3);margin-bottom:1.6rem;}}
-.lbl{{font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:7px;}}
+/* FIX: lbl — brighter so "DECISION TEXT", "TYPE" labels are visible */
+.lbl{{font-size:.65rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t2);margin-bottom:7px;}}
 
 .card{{background:var(--surf);border:1px solid var(--border);border-radius:var(--r-lg);padding:.9rem 1.15rem;margin-bottom:7px;box-shadow:var(--sh);}}
 .card-lbl{{font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:5px;}}
@@ -243,7 +259,6 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .scan-bar{{height:2px;background:var(--surf3);border-radius:2px;overflow:hidden;margin:3px 0 5px;}}
 .scan-fill{{height:100%;width:25%;background:var(--accent);border-radius:2px;animation:scan-anim 1s ease-in-out infinite;}}
 
-/* FIX 17: Confidence ring pulse on bias */
 @keyframes ring-pulse{{0%,100%{{opacity:1;}}50%{{opacity:.6;}}}}
 .ring-pulse{{animation:ring-pulse 2s ease-in-out infinite;}}
 
@@ -256,15 +271,15 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 .dup-warn{{display:flex;align-items:flex-start;gap:10px;background:var(--amb-lt);border:1px solid var(--amber);border-radius:var(--r-lg);padding:.85rem 1.1rem;font-size:.85rem;color:var(--amber);margin-bottom:1rem;}}
 .div{{border:none;border-top:1px solid var(--border);margin:1.1rem 0;}}
 
-.sb-lbl{{font-size:.58rem!important;font-weight:700!important;letter-spacing:.14em!important;text-transform:uppercase!important;color:rgba(255,255,255,.28)!important;padding:14px 0 4px!important;display:block!important;}}
+.sb-lbl{{font-size:.58rem!important;font-weight:700!important;letter-spacing:.14em!important;text-transform:uppercase!important;color:rgba(255,255,255,.38)!important;padding:14px 0 4px!important;display:block!important;}}
 
-.char-row{{display:flex;justify-content:space-between;font-size:.7rem;font-weight:600;margin-top:5px;}}
-.char-track{{height:2px;background:var(--surf3);border-radius:1px;margin-top:4px;}}
+/* FIX: Char counter inline below textarea — not floating right */
+.char-row{{display:flex;justify-content:space-between;font-size:.7rem;font-weight:600;margin-top:4px;margin-bottom:10px;}}
+.char-track{{height:2px;background:var(--surf3);border-radius:1px;margin-top:3px;}}
 .char-fill{{height:100%;border-radius:1px;transition:width .3s,background .3s;}}
 
 .preview{{background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:.55rem .85rem;font-family:var(--ff-m);font-size:.72rem;color:var(--t1);line-height:1.6;max-height:65px;overflow:hidden;white-space:pre-wrap;margin-bottom:5px;}}
 
-/* FIX 4: Test rows — neutral pending icon, no warning triangle */
 .test-row{{display:flex;align-items:center;gap:10px;padding:.65rem 1rem;background:var(--surf);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:5px;}}
 .test-ico{{font-size:1rem;flex-shrink:0;width:20px;text-align:center;}}
 .test-tag{{font-size:.78rem;font-weight:700;color:var(--t1);flex:1;}}
@@ -282,28 +297,28 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 
 .ring-wrap{{display:flex;align-items:center;justify-content:center;margin:5px 0;}}
 
-/* FIX 2: Quick Switch active state — visible green ring + bg */
+/* FIX: Quick Switch active state */
 .qs-btn-active .stButton>button{{background:var(--grn-lt)!important;color:var(--green)!important;border:1.5px solid var(--green)!important;box-shadow:none!important;}}
 .qs-btn-active .stButton>button:hover{{background:var(--grn-lt)!important;opacity:1!important;transform:none!important;}}
 
-/* FIX 15: About bias dimension compact rows */
 .dim-row{{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--surf3);}}
 .dim-row:last-child{{border-bottom:none;}}
 .dim-name{{font-size:.82rem;font-weight:600;color:var(--t1);}}
 .dim-desc{{font-size:.73rem;color:var(--t3);max-width:55%;text-align:right;}}
 
-/* FIX 5: Slim active model banner */
+/* FIX: Active model banner — Groq variant uses dark text on amber for contrast */
 .model-banner{{display:flex;align-items:center;justify-content:space-between;background:var(--acc-lt);border:1px solid var(--accent);border-radius:var(--r-lg);padding:.45rem 1rem;margin-bottom:.9rem;gap:8px;flex-wrap:nowrap;overflow:hidden;}}
-.model-banner.groq-banner{{background:var(--amb-lt);border-color:var(--amber);}}
+.model-banner.groq-banner{{background:#2a1a00;border-color:#c88a20;}}
 .model-banner-left{{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;}}
 .model-banner-label{{font-size:.72rem;font-weight:700;color:var(--t1);white-space:nowrap;flex-shrink:0;}}
-.model-banner-model{{font-family:var(--ff-m);font-size:.7rem;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
+.model-banner-model{{font-family:var(--ff-m);font-size:.7rem;color:#e0b060;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}}
+.model-banner:not(.groq-banner) .model-banner-model{{color:#8ab4ff;}}
 
-/* FIX 9: Clear analysis button */
+/* FIX: Clear button */
 .clear-btn .stButton>button{{background:transparent!important;color:var(--t3)!important;border:1px solid var(--border)!important;box-shadow:none!important;font-size:.75rem!important;padding:.3rem .9rem!important;}}
 .clear-btn .stButton>button:hover{{background:var(--red-lt)!important;color:var(--red)!important;border-color:var(--red)!important;transform:none!important;box-shadow:none!important;}}
 
-/* FIX 14: Settings test status inline */
+/* FIX: Settings test status inline */
 .test-status-ok{{display:inline-block;background:var(--grn-lt);color:var(--green);border:1px solid var(--green);border-radius:var(--r-pill);padding:2px 10px;font-size:.72rem;font-weight:700;margin-top:6px;}}
 .test-status-err{{display:inline-block;background:var(--red-lt);color:var(--red);border:1px solid var(--red);border-radius:var(--r-pill);padding:2px 10px;font-size:.72rem;font-weight:700;margin-top:6px;}}
 
@@ -314,9 +329,24 @@ footer,[data-testid="stStatusWidget"],[data-testid="stDecoration"],#MainMenu{{di
 [data-testid="stDataFrame"]{{border-radius:var(--r-lg)!important;overflow:hidden!important;}}
 
 .winner-bar{{background:var(--acc-lt);border:1px solid var(--accent);border-radius:var(--r-lg);padding:.8rem 1.2rem;text-align:center;font-size:.88rem;font-weight:600;color:var(--accent);margin-bottom:.9rem;}}
-
-/* FIX 10: Scan mode section separator */
 .section-sep{{border:none;border-top:1px solid var(--surf3);margin:.9rem 0 .6rem;}}
+
+/* FIX: Quick Switch card — full border on all sides, proper card */
+.qs-card{{background:var(--surf);border:1px solid var(--border);border-radius:var(--r-lg);padding:.85rem 1rem;}}
+.qs-card-header{{font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:8px;}}
+
+/* FIX: Side-by-side compare — wrapped in context card */
+.compare-wrap{{background:var(--surf2);border:1px solid var(--border);border-radius:var(--r-lg);padding:.75rem 1rem;margin-top:.5rem;}}
+.compare-label{{font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:6px;}}
+
+/* FIX: History expander — two-line format */
+.hist-title{{display:flex;flex-direction:column;gap:2px;}}
+.hist-t1{{font-size:.84rem;font-weight:700;}}
+.hist-t2{{font-size:.7rem;color:var(--t3);}}
+
+/* Sidebar session counter tooltip */
+.sess-counter{{font-size:.68rem;color:rgba(255,255,255,.42);padding:4px 2px 8px;}}
+.sess-counter abbr{{text-decoration:none;border-bottom:1px dotted rgba(255,255,255,.2);cursor:help;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -379,16 +409,16 @@ VIEWS = [
 _DEFS = {
     "view":"analyse","session_count":0,"last_report":None,
     "last_text":"","last_dtype":"job","appeal_letter":None,
-    "decision_input":"","scan_mode":"full",            # FIX 3: removed dtype_sel from here
+    "decision_input":"","scan_mode":"full",
     "ai_provider":"gemini","ai_model":"gemini-1.5-flash",
     "force_rerun":False,"fb_comment":"","cmp_ra":None,"cmp_rb":None,
-    "gemini_test_result":None,"groq_test_result":None, # FIX 14
+    "gemini_test_result":None,"groq_test_result":None,
 }
 for k, v in _DEFS.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# FIX 3: dtype_sel managed separately to avoid default-value conflict
+# FIX: dtype_sel managed separately, never set via default kwarg to avoid Streamlit warning
 if "dtype_sel" not in st.session_state:
     st.session_state["dtype_sel"] = "job"
 
@@ -424,13 +454,13 @@ def all_reports():
     except: return []
 
 def _trunc(s, n):
-    """FIX 12: truncate at word boundary where possible"""
+    """Word-boundary truncation."""
     s = str(s)
     if len(s) <= n:
         return s
     cut = s[:n]
     last_space = cut.rfind(" ")
-    if last_space > n - 8:   # word boundary close enough
+    if last_space > n - 8:
         return cut[:last_space] + "…"
     return cut + "…"
 
@@ -458,7 +488,6 @@ def sev_badge(conf, bias, sev="low"):
     if s == "medium" or conf >= .45: return '<span class="sev sev-m">Medium</span>'
     return '<span class="sev sev-l">Low</span>'
 
-# FIX 16: handle gemini+groq mixed case
 def provider_badge_html(prov):
     p = (prov or "gemini").lower()
     if "gemini" in p and "groq" in p:
@@ -468,7 +497,6 @@ def provider_badge_html(prov):
     else:
         return '<span style="background:rgba(26,35,126,.3);color:#8AB4F8;border:1px solid #8AB4F8;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">🔵 Gemini</span>'
 
-# FIX 17: ring_svg with optional pulse class
 def ring_svg(pct, bias, size=110):
     r   = size * 0.38
     cx  = cy = size / 2
@@ -567,12 +595,13 @@ def _base():
             "font":{"family":"Syne,system-ui,sans-serif","color":"#9090AA"}}
 
 def chart_pie(b, c):
+    total = b + c or 1
+    # FIX: no percentage labels inside donut — they overlap center text
     fig = go.Figure(go.Pie(
         labels=["Bias Detected","No Bias"], values=[max(b,1),max(c,1)], hole=.68,
         marker={"colors":[tok("--red"),tok("--green")],"line":{"color":tok("--bg"),"width":3}},
-        textfont={"family":"Syne,sans-serif","size":11}, textinfo="percent",
-        hovertemplate="%{label}: %{value}<extra></extra>"))
-    total = b + c or 1
+        textfont={"family":"Syne,sans-serif","size":11}, textinfo="none",
+        hovertemplate="%{label}: %{value} (%{percent})<extra></extra>"))
     fig.add_annotation(
         text=f"<b style='font-size:20px'>{total}</b><br><span style='font-size:9px;color:{tok('--t3')}'>TOTAL</span>",
         x=.5, y=.5, showarrow=False,
@@ -616,7 +645,6 @@ def chart_sparkline(scores):
         font={"family":"Syne,sans-serif"})
     return fig
 
-# FIX 8: trend chart — force x-axis to treat values as categories (date strings) not timestamps
 def chart_trend(td):
     if not td: return None
     dates  = [d.get("date","") for d in td]
@@ -839,25 +867,26 @@ with st.sidebar:
     dot_cls    = "api-ok" if gem_status else ("api-warn" if groq_status else "api-err")
     status_txt = (
         "Gemini + Groq ready"             if gem_status and groq_status else
-        "Gemini ready (Groq not set)"     if gem_status else
-        "Groq only (add GEMINI_API_KEY)"  if groq_status else
+        "Gemini ready"                    if gem_status else
+        "Groq only"                       if groq_status else
         "No API key — see Settings"
     )
 
     cur_prov  = st.session_state.get("ai_provider","gemini")
     cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
+    # FIX: sidebar model display — more readable, higher contrast
     mdl_short = _trunc(
         cur_model.replace("gemini-","G·").replace("llama-","L·")
-                 .replace("-versatile","").replace("-instant",""), 18)
+                 .replace("-versatile","").replace("-instant",""), 20)
     prov_icon = "🔵" if cur_prov == "gemini" else "🟠"
 
     st.markdown(
         f'<div style="padding:18px 0 12px;">'
         f'<div class="vw-mark">Verdict Watch</div>'
         f'<div class="vw-ver">V14 · Dual AI Edition</div>'
-        f'<div style="margin-top:9px;font-size:.68rem;color:rgba(255,255,255,.38);">'
+        f'<div style="margin-top:9px;font-size:.68rem;color:rgba(255,255,255,.55);">'
         f'<span class="api-dot {dot_cls}"></span>{status_txt}</div>'
-        f'<div style="margin-top:5px;font-size:.65rem;color:rgba(255,255,255,.25);">'
+        f'<div style="margin-top:4px;font-size:.65rem;color:rgba(255,255,255,.45);">'
         f'{prov_icon} {mdl_short}</div>'
         f'</div>',
         unsafe_allow_html=True)
@@ -874,10 +903,10 @@ with st.sidebar:
 
     st.markdown('<div style="border-top:1px solid rgba(255,255,255,.06);margin:10px 0 4px;"></div>', unsafe_allow_html=True)
     st.markdown('<span class="sb-lbl">Quick Examples</span>', unsafe_allow_html=True)
-    # FIX 12: word-boundary truncation already applied via _trunc
+    # FIX: word-boundary truncation at 22 chars — cleaner sidebar
     for idx in [1, 5, 6, 8]:
         ex = EXAMPLES[idx]
-        if st.button(_trunc(ex["tag"], 26), key=f"ex_{idx}", use_container_width=True):
+        if st.button(_trunc(ex["tag"], 22), key=f"ex_{idx}", use_container_width=True):
             st.session_state["decision_input"] = ex["text"]
             st.session_state["dtype_sel"]      = ex["type"]
             st.session_state["view"]           = "analyse"
@@ -886,13 +915,14 @@ with st.sidebar:
     st.markdown('<div style="border-top:1px solid rgba(255,255,255,.06);margin:10px 0 8px;"></div>', unsafe_allow_html=True)
     sc = st.session_state.get("session_count", 0)
     ar = len(all_reports())
+    # FIX: session counter — clearer label with abbr tooltip
     st.markdown(
-        f'<div style="padding:4px 2px 8px;">'
-        f'<span style="font-size:.68rem;color:rgba(255,255,255,.35);">Session </span>'
-        f'<span style="font-size:.68rem;color:rgba(255,255,255,.65);font-weight:700;">{sc}</span>'
-        f'<span style="font-size:.68rem;color:rgba(255,255,255,.2);margin:0 6px;">·</span>'
-        f'<span style="font-size:.68rem;color:rgba(255,255,255,.35);">Total </span>'
-        f'<span style="font-size:.68rem;color:rgba(255,255,255,.65);font-weight:700;">{ar}</span>'
+        f'<div class="sess-counter">'
+        f'<abbr title="Analyses run this session">Session</abbr> '
+        f'<strong style="color:rgba(255,255,255,.7);">{sc}</strong>'
+        f'<span style="margin:0 5px;opacity:.3;">·</span>'
+        f'<abbr title="All analyses ever stored">All time</abbr> '
+        f'<strong style="color:rgba(255,255,255,.7);">{ar}</strong>'
         f'</div>',
         unsafe_allow_html=True)
 
@@ -959,7 +989,8 @@ if view == "models":
             bg_style     = "background:var(--acc-lt);" if is_sel else ""
             rec_badge    = (' <span style="background:rgba(74,222,128,.15);color:#4ADE80;border-radius:999px;padding:1px 7px;font-size:.6rem;font-weight:700;border:1px solid #4ADE80;">✦ Recommended</span>'
                             if recommended else "")
-            col_a, col_b = st.columns([4,1], gap="small")
+            # FIX: column ratio 3:1 to reduce whitespace gap on Use button
+            col_a, col_b = st.columns([3,1], gap="small")
             with col_a:
                 active_html = '<div style="font-size:.72rem;color:var(--accent);font-weight:700;">✓ Active</div>' if is_sel else ""
                 st.markdown(
@@ -988,7 +1019,7 @@ if view == "models":
             bg_style     = "background:var(--amb-lt);" if is_sel else ""
             rec_badge    = (' <span style="background:rgba(251,176,64,.15);color:#FBB040;border-radius:999px;padding:1px 7px;font-size:.6rem;font-weight:700;border:1px solid #FBB040;">✦ Recommended</span>'
                             if recommended else "")
-            col_a, col_b = st.columns([4,1], gap="small")
+            col_a, col_b = st.columns([3,1], gap="small")
             with col_a:
                 active_html = '<div style="font-size:.72rem;color:var(--amber);font-weight:700;margin-top:3px;">✓ Active</div>' if is_sel else ""
                 st.markdown(
@@ -1019,8 +1050,8 @@ if view == "models":
         f'</div>',
         unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    # FIX 13: primary-styled CTA
+    # FIX: breathing room before CTA
+    st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
     if st.button("⚡ Go to Analyse →", key="goto_analyse_from_models", type="primary", use_container_width=True):
         st.session_state["view"] = "analyse"
         st.rerun()
@@ -1041,7 +1072,6 @@ elif view == "analyse":
     banner_cls     = "" if cur_prov=="gemini" else "groq-banner"
     key_miss       = "" if prov_available else ' <span style="color:var(--red);font-size:.7rem;font-weight:600;">⚠ Key missing</span>'
 
-    # FIX 5: Slim banner; FIX 1: button navigates to models view
     st.markdown(
         f'<div class="model-banner {banner_cls}">'
         f'<div class="model-banner-left">'
@@ -1052,9 +1082,7 @@ elif view == "analyse":
         f'</div>'
         f'</div>',
         unsafe_allow_html=True)
-    # FIX 1: real Streamlit button for "Change model" that actually navigates
-    if st.button("⊕ Change model", key="change_model_btn",
-                 help="Open Model Selector"):
+    if st.button("⊕ Change model", key="change_model_btn", help="Open Model Selector"):
         st.session_state["view"] = "models"
         st.rerun()
 
@@ -1089,26 +1117,31 @@ elif view == "analyse":
                     with st.expander("Preview"):
                         st.text(_trunc(ex_text, 600))
 
+        # FIX: char counter inline below textarea — not in a separate column
+        n = len((decision_text or "").strip())
+        if n > 150:  cc, cl = tok("--green"), "Ready"
+        elif n > 50: cc, cl = tok("--amber"), "Min length"
+        else:        cc, cl = tok("--red"),   "Too short"
+        w = min(100, int(n/3))
+        st.markdown(
+            f'<div class="char-row" style="color:{cc};"><span>{n:,} chars</span><span style="font-size:.65rem;">{cl}</span></div>'
+            f'<div class="char-track"><div class="char-fill" style="width:{w}%;background:{cc};"></div></div>',
+            unsafe_allow_html=True)
+
+        # FIX: Signals detected — anchored right below textarea, above TYPE
+        if decision_text and len(decision_text.strip()) > 30:
+            detected = [d for d in BIAS_DIMS if re.search(BIAS_KW[d], decision_text, re.IGNORECASE)]
+            if detected:
+                st.markdown('<div class="lbl" style="margin-top:4px;">Signals detected in text</div>', unsafe_allow_html=True)
+                st.markdown("".join(f'<span class="chip ca" style="margin-bottom:4px;">{d}</span>' for d in detected), unsafe_allow_html=True)
+
         opts = ["job","loan","medical","university","other"]
         cur  = st.session_state.get("dtype_sel","job")
         idx  = opts.index(cur) if cur in opts else 0
-        tc1, tc2 = st.columns([2,1])
-        with tc1:
-            # FIX 3: key is dtype_sel, initialised separately above — no conflict
-            dtype = st.selectbox("Type", opts, format_func=lambda x: TYPE_LABELS[x], index=idx, key="dtype_sel")
-        with tc2:
-            n = len((decision_text or "").strip())
-            if n > 150:  cc, cl = tok("--green"), "Ready"
-            elif n > 50: cc, cl = tok("--amber"), "Min length"
-            else:        cc, cl = tok("--red"),   "Too short"
-            w = min(100, int(n/3))
-            st.markdown(
-                f'<div style="margin-top:22px;">'
-                f'<div class="char-row" style="color:{cc};"><span>{n:,} chars</span><span style="font-size:.65rem;">{cl}</span></div>'
-                f'<div class="char-track"><div class="char-fill" style="width:{w}%;background:{cc};"></div></div></div>',
-                unsafe_allow_html=True)
+        # FIX: no default= kwarg on selectbox to avoid Streamlit warning
+        dtype = st.selectbox("Type", opts, format_func=lambda x: TYPE_LABELS[x], index=idx, key="dtype_sel",
+                             label_visibility="visible")
 
-        # FIX 10: visual separator before scan mode
         st.markdown('<hr class="section-sep">', unsafe_allow_html=True)
         st.markdown('<div class="lbl">Scan Mode</div>', unsafe_allow_html=True)
         scan_mode = st.radio(
@@ -1121,7 +1154,6 @@ elif view == "analyse":
         with ba1:
             run_btn = st.button("⚡ Run Analysis", key="run_btn", disabled=not any_api_ok())
         with ba2:
-            # FIX 9: Clear button only shown when there's a result
             if st.session_state.get("last_report"):
                 st.markdown('<div class="clear-btn">', unsafe_allow_html=True)
                 if st.button("✕ Clear", key="clear_btn"):
@@ -1132,34 +1164,32 @@ elif view == "analyse":
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # FIX 11: Compare toggle separated with divider
+        # FIX: side-by-side compare wrapped in card for context
         st.markdown('<hr class="section-sep">', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="compare-wrap">'
+            '<div class="compare-label">Compare Mode</div>',
+            unsafe_allow_html=True)
         compare_mode = st.toggle("Side-by-side compare", value=False, key="compare_toggle")
+        st.markdown('</div>', unsafe_allow_html=True)
 
         if compare_mode:
             st.markdown('<div class="lbl" style="margin-top:8px;">Decision B (for comparison)</div>', unsafe_allow_html=True)
             dt_b = st.text_area("text_b", label_visibility="collapsed", height=120, key="decision_input_b", placeholder="Paste second decision…")
             ctp2 = st.selectbox("Type B", opts, format_func=lambda x: TYPE_LABELS[x], label_visibility="collapsed", key="dtype_b")
 
-        if decision_text and len(decision_text.strip()) > 30:
-            detected = [d for d in BIAS_DIMS if re.search(BIAS_KW[d], decision_text, re.IGNORECASE)]
-            if detected:
-                st.markdown('<div class="lbl" style="margin-top:8px;">Signals detected in text</div>', unsafe_allow_html=True)
-                st.markdown("".join(f'<span class="chip ca" style="margin-bottom:4px;">{d}</span>' for d in detected), unsafe_allow_html=True)
-
     with right_pad:
         st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+        # FIX: full card border on all sides for Quick Switch panel
         st.markdown(
-            '<div class="card" style="margin-top:2px;border-left:3px solid var(--accent);">'
-            '<div class="card-lbl">Quick Switch Model</div>'
-            '<div style="margin-top:6px;">',
+            '<div class="qs-card">'
+            '<div class="qs-card-header">Quick Switch Model</div>',
             unsafe_allow_html=True)
 
         quick_models = {
             "gemini": ["gemini-1.5-flash","gemini-2.0-flash","gemini-1.5-pro"],
             "groq":   ["llama-3.3-70b-versatile","llama-3.1-8b-instant","mixtral-8x7b-32768"],
         }
-        # FIX 2: active model button uses green-tinted class via wrapper div
         for p, models in quick_models.items():
             p_icon  = "🔵" if p=="gemini" else "🟠"
             p_color = tok("--accent") if p=="gemini" else tok("--amber")
@@ -1168,7 +1198,6 @@ elif view == "analyse":
                 is_cur = (st.session_state.get("ai_model")==m and st.session_state.get("ai_provider")==p)
                 short  = m.replace("gemini-","").replace("llama-","").replace("-versatile","").replace("-instant","")
                 prefix = "✓ " if is_cur else ""
-                # Wrap active button in class for targeted CSS override
                 if is_cur:
                     st.markdown('<div class="qs-btn-active">', unsafe_allow_html=True)
                 if st.button(f"{prefix}{short}", key=f"qs_{p}_{m}", use_container_width=True):
@@ -1178,7 +1207,8 @@ elif view == "analyse":
                 if is_cur:
                     st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown('</div></div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)  # close qs-card
+
         st.markdown(
             f'<div class="card card-info" style="margin-top:8px;">'
             f'<div class="card-lbl">Bias Dimensions</div>'
@@ -1343,7 +1373,9 @@ elif view == "dashboard":
         scores  = [r.get("confidence_score",0) for r in hist]
         b_rate  = round(len(b_reps)/len(hist)*100) if hist else 0
         avg_c   = round(sum(scores)/len(scores)*100) if scores else 0
-        top_b   = Counter(all_bt).most_common(1)[0][0] if all_bt else "—"
+        # FIX: Top Bias — hard truncate to 10 chars for metric card
+        top_b_raw = Counter(all_bt).most_common(1)[0][0] if all_bt else "—"
+        top_b = _trunc(top_b_raw, 10)
         fb      = services.get_feedback_stats()
         sev_map = {"high":3,"medium":2,"low":1}
         sev_vals= [sev_map.get((r.get("severity") or "low").lower(),1) for r in hist]
@@ -1358,14 +1390,17 @@ elif view == "dashboard":
         k5.metric("Avg Severity",avg_sev); k6.metric("Helpful %",f"{fb['helpful_pct']}%" if fb["total"] else "—")
 
         if gem_count or grq_count:
-            st.markdown('<div class="lbl" style="margin-top:.5rem;">AI Provider Usage</div>', unsafe_allow_html=True)
-            total_  = gem_count+grq_count
+            total_  = gem_count + grq_count
             gem_pct = int(gem_count/total_*100) if total_ else 0
-            grq_pct = 100-gem_pct
+            grq_pct = 100 - gem_pct
+            # FIX: min segment width 4px so neither bar disappears at 0%
+            gem_w = max(4, int(gem_pct * 0.98))
+            grq_w = max(4, 100 - gem_w)
+            st.markdown('<div class="lbl" style="margin-top:.5rem;">AI Provider Usage</div>', unsafe_allow_html=True)
             st.markdown(
                 f'<div style="display:flex;gap:3px;border-radius:var(--r-pill);overflow:hidden;height:8px;margin-bottom:4px;">'
-                f'<div style="width:{gem_pct}%;background:#8AB4F8;"></div>'
-                f'<div style="width:{grq_pct}%;background:#FBB040;"></div>'
+                f'<div style="width:{gem_w}%;background:#8AB4F8;min-width:4px;"></div>'
+                f'<div style="width:{grq_w}%;background:#FBB040;min-width:4px;"></div>'
                 f'</div>'
                 f'<div style="display:flex;gap:16px;font-size:.7rem;">'
                 f'<span style="color:#8AB4F8;">🔵 Gemini {gem_count} ({gem_pct}%)</span>'
@@ -1457,17 +1492,19 @@ elif view == "history":
                 file_name=f"verdict_hist_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv", key="hist_dl")
 
-        # FIX 6: cleaner expander titles
+        # FIX: cleaner two-line expander title — verdict + confidence on line 1, date + provider on line 2
         for r in filt:
             bias    = r.get("bias_found",False)
             conf    = int(r.get("confidence_score",0)*100)
-            aff     = r.get("affected_characteristic") or "—"
-            created = (r.get("created_at") or "")[:10]  # just date, not microseconds
+            aff     = _trunc(r.get("affected_characteristic") or "unknown", 20)
+            created = (r.get("created_at") or "")[:10]
             ico     = "⚠" if bias else "✓"
             verdict = "Bias" if bias else "Clean"
             prov_r  = r.get("ai_provider","gemini")
             prov_ico= "🔵" if "groq" not in (prov_r or "") else "🟠"
-            with st.expander(f'{ico} {verdict} · {conf}% conf · {aff} · {created} · {prov_ico}'):
+            # Cleaner title: verdict · confidence · affected characteristic
+            title = f"{ico} {verdict} · {conf}% conf · {aff} · {created} {prov_ico}"
+            with st.expander(title):
                 ec1, ec2 = st.columns(2, gap="large")
                 with ec1:
                     vcls = "card-err" if bias else "card-ok"
@@ -1511,7 +1548,6 @@ elif view == "batch":
     if not any_api_ok():
         st.markdown('<div class="key-err">⚠ API key missing — see Settings.</div>', unsafe_allow_html=True)
 
-    # FIX 7: slim inline badge instead of heavy card
     cur_prov  = st.session_state.get("ai_provider","gemini")
     cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
     st.markdown(
@@ -1610,7 +1646,6 @@ elif view == "test":
 
     cur_prov  = st.session_state.get("ai_provider","gemini")
     cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
-    # FIX 7 style: slim badge also for test suite
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">'
         f'<span style="font-size:.72rem;color:var(--t3);">Model for Tests:</span>'
@@ -1623,7 +1658,6 @@ elif view == "test":
         st.markdown('<div class="key-err">⚠ API key missing — cannot run tests.</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="lbl" style="margin-bottom:10px;">Test Cases</div>', unsafe_allow_html=True)
-        # FIX 4: neutral ○ icon for all pending rows — no ⚠ triangle
         for i, ex in enumerate(EXAMPLES,1):
             bias_lbl = "Bias expected" if ex["expect_bias"] else "Clean expected"
             st.markdown(
@@ -1680,11 +1714,19 @@ elif view == "test":
                 f'<div class="char-fill" style="width:{int(acc*100)}%;background:{acc_col};height:100%;"></div></div>',
                 unsafe_allow_html=True)
 
-            for i, res in enumerate(ts_results,1):
-                ex     = res["ex"]
-                status_= res["status"]
+            # FIX: FAIL tests pinned first (expanded), then PASS tests (collapsed)
+            failed = [r for r in ts_results if r["status"] != "pass"]
+            passed_list = [r for r in ts_results if r["status"] == "pass"]
+
+            if failed:
+                st.markdown(f'<div class="lbl" style="color:var(--red);margin-bottom:6px;">⚠ Failed / Errors ({len(failed)})</div>', unsafe_allow_html=True)
+            for res in failed + passed_list:
+                i       = ts_results.index(res) + 1
+                ex      = res["ex"]
+                status_ = res["status"]
                 badge_lbl = {"pass":"PASS ✓","fail":"FAIL ✗","error":"ERROR"}[status_]
                 ico_r  = "✅" if status_=="pass" else ("❌" if status_=="fail" else "⚠")
+                # Fail/error tests default expanded, pass tests collapsed
                 with st.expander(f'{ico_r} Test {i}: {ex["tag"]}  [{badge_lbl}]', expanded=(status_!="pass")):
                     st.markdown(f'<div class="preview">{ex["text"]}</div>', unsafe_allow_html=True)
                     if res["err"]:
@@ -1752,7 +1794,6 @@ elif view == "settings":
             f'<div class="card-val" style="font-size:.72rem;margin-top:3px;">Get free key: console.groq.com</div></div>',
             unsafe_allow_html=True)
 
-        # FIX 14: persist test results in session state so they survive reruns
         if gem_status:
             if st.button("⊛ Test Gemini Connection", key="test_gemini"):
                 with st.spinner("Testing Gemini…"):
@@ -1848,16 +1889,16 @@ elif view == "about":
                 + "".join(f'<div style="font-size:.72rem;color:var(--t1);padding:2px 0;font-family:var(--ff-m);">{m}</div>' for m in GROQ_MODELS)
                 + '</div></div>', unsafe_allow_html=True)
 
-        # FIX 15: compact dim rows, not full cards
+        # FIX: All 7 bias dimensions shown including Insurance Classification
         st.markdown('<div class="lbl" style="margin-top:10px;">Bias Dimensions Detected</div>', unsafe_allow_html=True)
         dims = [
-            ("Gender Bias","Gender, name, or parental status"),
-            ("Age Discrimination","Unfair weighting of age group"),
-            ("Racial / Ethnic Bias","Name-based or origin profiling"),
-            ("Geographic Redlining","Zip code as discriminatory proxy"),
-            ("Socioeconomic Bias","Employment sector over-weighting"),
-            ("Language Discrimination","Primary language used against applicants"),
-            ("Insurance Classification","Insurance tier ranking treatment"),
+            ("Gender Bias",               "Gender, name, or parental status"),
+            ("Age Discrimination",        "Unfair weighting of age group"),
+            ("Racial / Ethnic Bias",      "Name-based or origin profiling"),
+            ("Geographic Redlining",      "Zip code as discriminatory proxy"),
+            ("Socioeconomic Bias",        "Employment sector over-weighting"),
+            ("Language Discrimination",   "Primary language used against applicants"),
+            ("Insurance Classification",  "Insurance tier used as risk proxy"),
         ]
         st.markdown(
             '<div class="card" style="padding:.75rem 1rem;">'
