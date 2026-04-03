@@ -1,0 +1,61 @@
+# cloudbuild.yaml — Verdict Watch V15
+# Google Cloud Build pipeline → Cloud Run deployment
+#
+# Deploy command:
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_GEMINI_API_KEY="your_key",_GROQ_API_KEY="your_key"
+#
+# Or set secrets via Secret Manager (recommended for production):
+#   gcloud secrets create GEMINI_API_KEY --data-file=- <<< "your_key"
+
+substitutions:
+  _SERVICE_NAME: verdict-watch
+  _REGION: asia-south1          # Mumbai — closest to India
+  _IMAGE: gcr.io/$PROJECT_ID/verdict-watch:$BUILD_ID
+  _GEMINI_API_KEY: ""           # Override at deploy time
+  _GROQ_API_KEY: ""             # Override at deploy time
+
+steps:
+  # Step 1: Build Docker image
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - $_IMAGE
+      - .
+    id: build
+
+  # Step 2: Push to Container Registry
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - $_IMAGE
+    id: push
+    waitFor: [build]
+
+  # Step 3: Deploy to Cloud Run
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE_NAME
+      - --image=$_IMAGE
+      - --region=$_REGION
+      - --platform=managed
+      - --allow-unauthenticated
+      - --memory=1Gi
+      - --cpu=1
+      - --min-instances=0
+      - --max-instances=3
+      - --port=8080
+      - --set-env-vars=GEMINI_API_KEY=$_GEMINI_API_KEY,GROQ_API_KEY=$_GROQ_API_KEY
+      - --set-env-vars=DATABASE_URL=sqlite:////data/verdict_watch.db
+    id: deploy
+    waitFor: [push]
+
+images:
+  - $_IMAGE
+
+options:
+  logging: CLOUD_LOGGING_ONLY
