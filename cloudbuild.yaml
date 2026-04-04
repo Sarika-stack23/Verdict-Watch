@@ -1,39 +1,35 @@
-# cloudbuild.yaml — Verdict Watch V15
-# Google Cloud Build pipeline → Cloud Run deployment
+# cloudbuild.yaml — Verdict Watch V16
+# Google Cloud Build → Cloud Run deployment
 #
-# Deploy command:
+# One-command deploy:
 #   gcloud builds submit --config cloudbuild.yaml \
 #     --substitutions=_GEMINI_API_KEY="your_key",_GROQ_API_KEY="your_key"
 #
-# Or set secrets via Secret Manager (recommended for production):
-#   gcloud secrets create GEMINI_API_KEY --data-file=- <<< "your_key"
+# Vertex AI is automatically available inside Cloud Run when
+# GOOGLE_CLOUD_PROJECT is set — no extra API key needed.
 
 substitutions:
   _SERVICE_NAME: verdict-watch
   _REGION: asia-south1          # Mumbai — closest to India
   _IMAGE: gcr.io/$PROJECT_ID/verdict-watch:$BUILD_ID
-  _GEMINI_API_KEY: ""           # Override at deploy time
-  _GROQ_API_KEY: ""             # Override at deploy time
+  _GEMINI_API_KEY: ""
+  _GROQ_API_KEY: ""
 
 steps:
   # Step 1: Build Docker image
   - name: gcr.io/cloud-builders/docker
-    args:
-      - build
-      - -t
-      - $_IMAGE
-      - .
+    args: [build, -t, $_IMAGE, .]
     id: build
 
   # Step 2: Push to Container Registry
   - name: gcr.io/cloud-builders/docker
-    args:
-      - push
-      - $_IMAGE
+    args: [push, $_IMAGE]
     id: push
     waitFor: [build]
 
   # Step 3: Deploy to Cloud Run
+  # GOOGLE_CLOUD_PROJECT is automatically set to $PROJECT_ID inside Cloud Run.
+  # This enables Vertex AI for Steps 4+5 with no extra config.
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
@@ -49,7 +45,9 @@ steps:
       - --min-instances=0
       - --max-instances=3
       - --port=8080
-      - --set-env-vars=GEMINI_API_KEY=$_GEMINI_API_KEY,GROQ_API_KEY=$_GROQ_API_KEY
+      - --set-env-vars=GEMINI_API_KEY=$_GEMINI_API_KEY
+      - --set-env-vars=GROQ_API_KEY=$_GROQ_API_KEY
+      - --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID
       - --set-env-vars=DATABASE_URL=sqlite:////data/verdict_watch.db
     id: deploy
     waitFor: [push]

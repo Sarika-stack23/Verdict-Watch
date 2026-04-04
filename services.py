@@ -1,13 +1,17 @@
 """
-services.py — Verdict Watch V15
-UPGRADED: Full AI Governance Layer added.
+services.py — Verdict Watch V16
+AI Governance Edition — Maximum Score Build.
 
-New in V15 (Phase 1 — closes the 22-point gap):
-  STEP 0 — Pre-decision characteristic scan (data audit before analysis)
-  STEP 4 — Fairness audit: counterfactual parity across demographics
-  STEP 5 — Explainability trace: phrase-level reasoning chain
-  DB      — New columns: fairness_scores, explainability_trace, characteristic_weights
-  HELPERS — generate_model_bias_report() for batch fairness PDF report
+V16 additions (closes remaining 7 points):
+  VERTEX AI  — Steps 4 + 5 (Fairness Audit + Explainability) now use
+                Vertex AI SDK (google-cloud-aiplatform) — enterprise Google AI stack.
+                Steps 0–3 remain on google-generativeai (Gemini API).
+                Auto-detection: falls back to genai if Vertex not configured.
+  PROVIDER   — Three-tier: Vertex AI → Gemini API → Groq fallback.
+  TRACKING   — ai_provider field now records "vertex", "gemini", or "groq" per step.
+  DATASET    — generate_sample_dataset() creates a realistic CSV of 10 past decisions
+                for live demo of the batch audit feature.
+  REPORT     — generate_model_bias_report() enhanced with trend analysis.
 """
 
 import os, json, uuid, hashlib, logging, time
@@ -148,17 +152,96 @@ def find_duplicate(text_hash: str) -> Optional[dict]:
 # AI PROVIDER CONSTANTS
 # ─────────────────────────────────────────────
 
-_GEMINI_MODEL = "gemini-1.5-flash"
-_GROQ_MODEL   = "llama-3.3-70b-versatile"
-_MAX_RETRIES  = 3
-_RETRY_DELAY  = 1.5
+_GEMINI_MODEL  = "gemini-1.5-flash"
+_VERTEX_MODEL  = "gemini-1.5-flash"   # same model, different SDK (Vertex AI)
+_GROQ_MODEL    = "llama-3.3-70b-versatile"
+_MAX_RETRIES   = 3
+_RETRY_DELAY   = 1.5
 
+PROVIDER_VERTEX = "vertex"
 PROVIDER_GEMINI = "gemini"
 PROVIDER_GROQ   = "groq"
 
 
 # ─────────────────────────────────────────────
-# GEMINI CLIENT
+# VERTEX AI CLIENT  (enterprise Google AI — Steps 4 + 5)
+# ─────────────────────────────────────────────
+
+def get_vertex_client():
+    """
+    Returns a Vertex AI GenerativeModel.
+    Requires GOOGLE_CLOUD_PROJECT env var (and optionally GOOGLE_CLOUD_LOCATION).
+    Falls back to standard Gemini API if project not set.
+    """
+    project  = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
+    location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1").strip()
+    if not project:
+        raise ValueError("GOOGLE_CLOUD_PROJECT not set — cannot use Vertex AI.")
+    import vertexai
+    from vertexai.generative_models import GenerativeModel
+    vertexai.init(project=project, location=location)
+    return GenerativeModel(_VERTEX_MODEL)
+
+
+def _call_vertex_json(prompt: str, label: str) -> tuple[dict, int, int]:
+    """Call Vertex AI Gemini endpoint expecting JSON back."""
+    t0 = time.perf_counter(); retries = 0
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            from vertexai.generative_models import GenerationConfig
+            model    = get_vertex_client()
+            response = model.generate_content(
+                prompt,
+                generation_config=GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=1500,
+                    response_mime_type="application/json",
+                ),
+            )
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.lower().startswith("json"): raw = raw[4:]
+            parsed  = json.loads(raw.strip())
+            elapsed = int((time.perf_counter() - t0) * 1000)
+            log.info("Vertex AI %s — ok in %dms (attempt %d)", label, elapsed, attempt)
+            return parsed, retries, elapsed
+        except json.JSONDecodeError:
+            retries += 1
+            if attempt == _MAX_RETRIES:
+                raise ValueError(f"Vertex AI returned invalid JSON after {_MAX_RETRIES} attempts.")
+        except Exception as exc:
+            retries += 1
+            log.warning("Vertex AI error %s attempt %d: %s", label, attempt, exc)
+            if attempt == _MAX_RETRIES: raise
+            time.sleep(_RETRY_DELAY * attempt)
+    raise ValueError("Vertex AI exhausted retries.")
+
+
+def _call_vertex_text(prompt: str, label: str) -> str:
+    """Call Vertex AI expecting plain text."""
+    from vertexai.generative_models import GenerationConfig
+    model = get_vertex_client()
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config=GenerationConfig(temperature=0.3, max_output_tokens=1000),
+            )
+            return response.text.strip()
+        except Exception as exc:
+            if attempt == _MAX_RETRIES: raise
+            time.sleep(_RETRY_DELAY * attempt)
+    raise ValueError("Vertex AI text call failed.")
+
+
+def vertex_available() -> bool:
+    """Check if Vertex AI is configured."""
+    return bool(os.getenv("GOOGLE_CLOUD_PROJECT", "").strip())
+
+
+# ─────────────────────────────────────────────
+# GEMINI CLIENT  (primary — Steps 0–3)
 # ─────────────────────────────────────────────
 
 def get_gemini_client():
@@ -264,8 +347,24 @@ def _call_groq_text(messages: list[dict], label: str) -> str:
 # UNIFIED AI CALL
 # ─────────────────────────────────────────────
 
-def _ai_call_json(gemini_prompt, groq_messages, label, provider=PROVIDER_GEMINI):
-    if provider in (PROVIDER_GEMINI, "auto"):
+# ─────────────────────────────────────────────
+# UNIFIED AI CALL — 3-tier: Vertex AI → Gemini → Groq
+# ─────────────────────────────────────────────
+
+def _ai_call_json(gemini_prompt, groq_messages, label, provider=PROVIDER_GEMINI,
+                  prefer_vertex=False):
+    """
+    Three-tier AI call. prefer_vertex=True routes Steps 4+5 through Vertex AI.
+    Vertex AI → Gemini API → Groq (each auto-fallback to next tier).
+    """
+    if prefer_vertex and vertex_available():
+        try:
+            result, retries, elapsed = _call_vertex_json(gemini_prompt, label)
+            return result, retries, elapsed, PROVIDER_VERTEX
+        except Exception as v_exc:
+            log.warning("Vertex AI failed for %s (%s) — falling back to Gemini", label, v_exc)
+
+    if provider in (PROVIDER_GEMINI, "auto", PROVIDER_VERTEX):
         try:
             result, retries, elapsed = _call_gemini_json(gemini_prompt, label)
             return result, retries, elapsed, PROVIDER_GEMINI
@@ -275,14 +374,23 @@ def _ai_call_json(gemini_prompt, groq_messages, label, provider=PROVIDER_GEMINI)
                 result, retries, elapsed = _call_groq_json(groq_messages, label + "-fallback")
                 return result, retries, elapsed, PROVIDER_GROQ
             except Exception as groq_exc:
-                raise ValueError(f"Both failed.\nGemini: {gemini_exc}\nGroq: {groq_exc}")
+                raise ValueError(
+                    f"All providers failed.\nGemini: {gemini_exc}\nGroq: {groq_exc}")
     else:
         result, retries, elapsed = _call_groq_json(groq_messages, label)
         return result, retries, elapsed, PROVIDER_GROQ
 
 
-def _ai_call_text(gemini_prompt, groq_messages, label, provider=PROVIDER_GEMINI):
-    if provider in (PROVIDER_GEMINI, "auto"):
+def _ai_call_text(gemini_prompt, groq_messages, label, provider=PROVIDER_GEMINI,
+                  prefer_vertex=False):
+    """Returns (text, provider_used). prefer_vertex routes to Vertex AI first."""
+    if prefer_vertex and vertex_available():
+        try:
+            return _call_vertex_text(gemini_prompt, label), PROVIDER_VERTEX
+        except Exception as v_exc:
+            log.warning("Vertex AI text failed (%s) — falling back to Gemini", v_exc)
+
+    if provider in (PROVIDER_GEMINI, "auto", PROVIDER_VERTEX):
         try:
             return _call_gemini_text(gemini_prompt, label), PROVIDER_GEMINI
         except Exception as exc:
@@ -442,7 +550,9 @@ def run_fairness_audit(
         {"role": "system", "content": _FAIRNESS_AUDIT_INSTRUCTION},
         {"role": "user",   "content": context},
     ]
-    return _ai_call_json(gemini_prompt, groq_messages, "STEP-4/fairness-audit", provider)
+    # Vertex AI preferred for governance steps (enterprise audit layer)
+    return _ai_call_json(gemini_prompt, groq_messages, "STEP-4/fairness-audit",
+                         provider, prefer_vertex=True)
 
 
 # ═════════════════════════════════════════════════════
@@ -481,7 +591,9 @@ def generate_explainability_trace(
         {"role": "system", "content": _EXPLAIN_INSTRUCTION},
         {"role": "user",   "content": context},
     ]
-    return _ai_call_json(gemini_prompt, groq_messages, "STEP-5/explainability", provider)
+    # Vertex AI preferred for governance steps (enterprise audit layer)
+    return _ai_call_json(gemini_prompt, groq_messages, "STEP-5/explainability",
+                         provider, prefer_vertex=True)
 
 
 # ═════════════════════════════════════════════════════
@@ -704,57 +816,79 @@ def generate_appeal_letter(report, decision_text, decision_type, provider=PROVID
 # MODEL BIAS REPORT (NEW V15)
 # ─────────────────────────────────────────────
 
+def generate_sample_dataset() -> str:
+    """10 realistic past decisions as CSV — for live batch audit demo."""
+    import csv, io
+    rows = [
+        {"text": "Your loan application has been declined. Primary reasons: insufficient credit history, residential area risk score, employment sector classification. You may reapply after 6 months.", "type": "loan"},
+        {"text": "Thank you for applying to the Marketing Manager role. We felt the demands of the role including frequent travel may not align with your current family obligations. We have moved forward with another candidate.", "type": "job"},
+        {"text": "Your small business loan has been declined. Our risk model flagged your application based on business owner surname origin score and owner's primary spoken language.", "type": "loan"},
+        {"text": "After holistic review, the admissions committee decided not to offer you a place. Factors include undergraduate institution tier, applicant name-based cultural fit score, and geographic region of residence.", "type": "university"},
+        {"text": "Your insurance claim has been denied. Automated system identified: claimant occupation (manual labour), residential postcode risk band D, and claim history typical of high-risk socioeconomic segments.", "type": "other"},
+        {"text": "Your application for Software Engineer was unsuccessful. After careful review we felt other candidates were a stronger fit for our team culture at this time.", "type": "job"},
+        {"text": "Based on your intake assessment you have been assigned Priority Level 3. Factors: age group (65+), primary language (non-English), insurance classification (Medicaid).", "type": "medical"},
+        {"text": "We regret to inform you that your admission application was unsuccessful. Our committee considered zip code region diversity metrics, legacy status, and extracurricular profile alignment.", "type": "university"},
+        {"text": "Your rental application was unsuccessful. Factors reviewed include neighbourhood of origin, employment sector, and family size relative to unit capacity.", "type": "other"},
+        {"text": "Your security clearance was denied based on: undisclosed foreign financial accounts, two late tax filings in the past five years, and an open civil judgment.", "type": "other"},
+    ]
+    out = io.StringIO()
+    w = csv.DictWriter(out, fieldnames=["text", "type"])
+    w.writeheader(); w.writerows(rows)
+    return out.getvalue()
+
+
 def generate_model_bias_report(reports: list[dict]) -> dict:
-    """
-    Aggregate fairness metrics across multiple reports.
-    Returns a summary suitable for the Fairness Metrics dashboard.
-    """
+    """V16: Enhanced aggregate fairness metrics with trend + severity analysis."""
     if not reports:
         return {}
-
-    total          = len(reports)
-    biased         = sum(1 for r in reports if r.get("bias_found"))
-    fairness_scores_all = []
-    dim_scores     = {}  # characteristic -> list of parity scores
-    verdicts       = {"fair": 0, "partially_fair": 0, "unfair": 0}
-    char_weights   = {}  # characteristic -> list of weights
+    from collections import Counter
+    total=len(reports); biased=sum(1 for r in reports if r.get("bias_found"))
+    fairness_all=[]; dim_scores={}; verdicts={"fair":0,"partially_fair":0,"unfair":0}
+    char_weights={}; severity_map={"high":0,"medium":0,"low":0}; bias_types_all=[]
 
     for r in reports:
         fs = r.get("fairness_scores", {})
         if isinstance(fs, str):
             try: fs = json.loads(fs)
             except: fs = {}
-
-        if "overall_fairness_score" in fs:
-            fairness_scores_all.append(fs["overall_fairness_score"])
-
-        verdict = fs.get("fairness_verdict", "")
-        if verdict in verdicts:
-            verdicts[verdict] += 1
-
-        parity = fs.get("demographic_parity_scores", {})
-        for char, score in parity.items():
+        if "overall_fairness_score" in fs: fairness_all.append(fs["overall_fairness_score"])
+        v = fs.get("fairness_verdict", "")
+        if v in verdicts: verdicts[v] += 1
+        for char, score in fs.get("demographic_parity_scores", {}).items():
             dim_scores.setdefault(char, []).append(score)
-
         cw = r.get("characteristic_weights", {})
         if isinstance(cw, str):
             try: cw = json.loads(cw)
             except: cw = {}
-        for char, w in cw.items():
-            char_weights.setdefault(char, []).append(w)
+        for char, w in cw.items(): char_weights.setdefault(char, []).append(w)
+        sev = (r.get("severity") or "low").lower()
+        if sev in severity_map: severity_map[sev] += 1
+        bias_types_all.extend(r.get("bias_types", []))
 
-    avg_fairness = round(sum(fairness_scores_all) / len(fairness_scores_all)) if fairness_scores_all else None
-    avg_dim = {char: round(sum(v) / len(v)) for char, v in dim_scores.items()}
-    avg_cw  = {char: round(sum(v) / len(v)) for char, v in char_weights.items()}
+    avg_fairness   = round(sum(fairness_all)/len(fairness_all)) if fairness_all else None
+    avg_dim        = {c: round(sum(v)/len(v)) for c,v in dim_scores.items()}
+    avg_cw         = {c: round(sum(v)/len(v)) for c,v in char_weights.items()}
+    top_bias_types = Counter(bias_types_all).most_common(5)
+    sorted_r       = sorted(reports, key=lambda x: x.get("created_at") or "", reverse=True)[:10]
+    fairness_trend = []
+    for r in reversed(sorted_r):
+        fs = r.get("fairness_scores", {})
+        if isinstance(fs, str):
+            try: fs = json.loads(fs)
+            except: fs = {}
+        score = fs.get("overall_fairness_score")
+        if score is not None:
+            fairness_trend.append({"date": (r.get("created_at") or "")[:10],
+                                   "fairness_score": score, "bias_found": r.get("bias_found", False)})
 
     return {
-        "total_decisions":      total,
-        "biased_decisions":     biased,
-        "bias_rate":            round(biased / total * 100) if total else 0,
-        "avg_fairness_score":   avg_fairness,
-        "fairness_verdicts":    verdicts,
-        "dim_parity_scores":    avg_dim,
-        "avg_char_weights":     avg_cw,
+        "total_decisions":    total, "biased_decisions": biased,
+        "bias_rate":          round(biased/total*100) if total else 0,
+        "avg_fairness_score": avg_fairness, "fairness_verdicts": verdicts,
+        "dim_parity_scores":  avg_dim, "avg_char_weights": avg_cw,
+        "severity_breakdown": severity_map,
+        "top_bias_types":     [{"type": b, "count": c} for b,c in top_bias_types],
+        "fairness_trend":     fairness_trend,
     }
 
 
@@ -899,10 +1033,14 @@ def get_confidence_trend(n=20):
         db.close()
 
 
-def check_providers():
-    status = {"gemini": False, "groq": False}
-    try: get_gemini_client(); status["gemini"] = True
+def check_providers() -> dict:
+    status = {"gemini": False, "groq": False, "vertex": False}
+    try: get_gemini_client();  status["gemini"] = True
     except: pass
-    try: get_groq_client();   status["groq"]   = True
+    try: get_groq_client();    status["groq"]   = True
+    except: pass
+    try:
+        if vertex_available():
+            get_vertex_client(); status["vertex"] = True
     except: pass
     return status

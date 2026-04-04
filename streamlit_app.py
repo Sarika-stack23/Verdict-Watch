@@ -413,7 +413,7 @@ _DEFS = {
     "decision_input":"","scan_mode":"full",
     "ai_provider":"gemini","ai_model":"gemini-1.5-flash",
     "force_rerun":False,"fb_comment":"","cmp_ra":None,"cmp_rb":None,
-    "gemini_test_result":None,"groq_test_result":None,
+    "gemini_test_result":None,"groq_test_result":None,"vertex_test_result":None,
 }
 for k, v in _DEFS.items():
     if k not in st.session_state:
@@ -491,7 +491,9 @@ def sev_badge(conf, bias, sev="low"):
 
 def provider_badge_html(prov):
     p = (prov or "gemini").lower()
-    if "gemini" in p and "groq" in p:
+    if "vertex" in p:
+        return '<span style="background:rgba(26,120,80,.2);color:#34D399;border:1px solid #34D399;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">◈ Vertex AI</span>'
+    elif "gemini" in p and "groq" in p:
         return '<span style="background:rgba(74,222,128,.1);color:#4ADE80;border:1px solid #4ADE80;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">🔀 Mixed</span>'
     elif "groq" in p:
         return '<span style="background:rgba(251,176,64,.12);color:#FBB040;border:1px solid #FBB040;border-radius:999px;padding:2px 9px;font-size:.67rem;font-weight:700;">🟠 Groq</span>'
@@ -1037,7 +1039,7 @@ with st.sidebar:
     st.markdown(
         f'<div style="padding:18px 0 12px;">'
         f'<div class="vw-mark">Verdict Watch</div>'
-        f'<div class="vw-ver">V14 · Dual AI Edition</div>'
+        f'<div class="vw-ver">V16 · AI Governance Edition</div>'
         f'<div style="margin-top:9px;font-size:.68rem;color:rgba(255,255,255,.55);">'
         f'<span class="api-dot {dot_cls}"></span>{status_txt}</div>'
         f'<div style="margin-top:4px;font-size:.65rem;color:rgba(255,255,255,.45);">'
@@ -1859,6 +1861,17 @@ elif view == "batch":
                     st.error("CSV must have a 'text' column.")
             except Exception as e:
                 st.error(f"❌ {e}")
+        # Sample dataset download
+        st.markdown('<div style="margin-top:6px;">', unsafe_allow_html=True)
+        st.download_button(
+            "↓ Download Sample Dataset (10 decisions)",
+            data=services.generate_sample_dataset(),
+            file_name="sample_decisions.csv",
+            mime="text/csv",
+            key="sample_dl",
+            help="10 realistic past decisions — upload this to demo the governance layer"
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
 
     bc1, bc2, bc3 = st.columns([2,1,1])
     with bc1:
@@ -2059,23 +2072,42 @@ elif view == "test":
 # ─────────────────────────────────────────────────────
 elif view == "settings":
     st.markdown('<div class="ph">Settings</div>', unsafe_allow_html=True)
-    st.markdown('<div class="ps">Verdict Watch V14 — Dual AI Edition configuration.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ps">Verdict Watch V16 — AI Governance Edition configuration.</div>', unsafe_allow_html=True)
 
     sc1, sc2 = st.columns(2, gap="large")
     with sc1:
-        st.markdown('<div class="lbl">API Keys</div>', unsafe_allow_html=True)
+        st.markdown('<div class="lbl">API Keys & Providers</div>', unsafe_allow_html=True)
         gem_cls = "card-ok" if gem_status else "card-err"
         gem_st  = "✓ GEMINI_API_KEY set" if gem_status else "✗ GEMINI_API_KEY missing"
         grq_cls = "card-ok" if groq_status else "card-warn"
         grq_st  = "✓ GROQ_API_KEY set" if groq_status else "⚠ GROQ_API_KEY not set (optional)"
+        vtx_ok  = bool(os.getenv("GOOGLE_CLOUD_PROJECT","").strip())
+        vtx_cls = "card-ok" if vtx_ok else "card-warn"
+        vtx_st  = f"✓ Project: {os.getenv('GOOGLE_CLOUD_PROJECT','')}" if vtx_ok else "⚠ GOOGLE_CLOUD_PROJECT not set (optional)"
         st.markdown(
-            f'<div class="card {gem_cls}"><div class="card-lbl">🔵 Google Gemini (Primary)</div>'
+            f'<div class="card card-info" style="margin-bottom:6px;"><div class="card-lbl">◈ Vertex AI (Governance Steps 4+5)</div>'
+            f'<div class="card-val mono" style="font-size:.78rem;">{vtx_st}</div>'
+            f'<div class="card-val" style="font-size:.72rem;margin-top:3px;">Set GOOGLE_CLOUD_PROJECT in .env to enable enterprise AI</div></div>'
+            f'<div class="card {gem_cls}"><div class="card-lbl">🔵 Google Gemini (Primary Steps 0–3)</div>'
             f'<div class="card-val mono">{gem_st}</div>'
             f'<div class="card-val" style="font-size:.72rem;margin-top:3px;">Get free key: aistudio.google.com/app/apikey</div></div>'
             f'<div class="card {grq_cls}" style="margin-top:6px;"><div class="card-lbl">🟠 Groq (Fallback)</div>'
             f'<div class="card-val mono">{grq_st}</div>'
             f'<div class="card-val" style="font-size:.72rem;margin-top:3px;">Get free key: console.groq.com</div></div>',
             unsafe_allow_html=True)
+
+        if vtx_ok:
+            if st.button("◈ Test Vertex AI Connection", key="test_vertex"):
+                with st.spinner("Testing Vertex AI…"):
+                    try:
+                        services.get_vertex_client()
+                        st.session_state["vertex_test_result"] = ("ok","✓ Vertex AI connected successfully")
+                    except Exception as e:
+                        st.session_state["vertex_test_result"] = ("err", str(e)[:120])
+            if st.session_state.get("vertex_test_result"):
+                kind, msg = st.session_state["vertex_test_result"]
+                cls_ = "test-status-ok" if kind=="ok" else "test-status-err"
+                st.markdown(f'<div class="{cls_}">{msg}</div>', unsafe_allow_html=True)
 
         if gem_status:
             if st.button("⊛ Test Gemini Connection", key="test_gemini"):
@@ -2127,20 +2159,20 @@ elif view == "settings":
             f'<div class="card-val mono">{fb["total"]} ratings · {fb["helpful_pct"]}% helpful</div></div>',
             unsafe_allow_html=True)
 
-        st.markdown('<div class="lbl" style="margin-top:14px;">V15 Features</div>', unsafe_allow_html=True)
+        st.markdown('<div class="lbl" style="margin-top:14px;">V16 Features</div>', unsafe_allow_html=True)
         for ico, name, desc in [
-            ("🔵","Gemini Primary","gemini-1.5-flash + all Gemini models"),
-            ("🟠","Groq Fallback","7 Groq models incl. DeepSeek R1"),
-            ("⊕","Model Selector","Full model picker with live switching"),
-            ("✦","Auto Fallback","Gemini → Groq if API call fails"),
-            ("◈","Pre-Decision Scan","Scans characteristics before analysis"),
-            ("◈","Fairness Audit","Counterfactual parity across demographics"),
-            ("◈","Explainability Trace","Phrase-level AI governance chain"),
-            ("◈","Fairness Metrics","Aggregate governance dashboard"),
-            ("◎","Provider Tracking","Each report stores which AI was used"),
-            ("⊞","Batch Multi-model","Batch runs use selected model"),
-            ("⊘","Test Suite","Model shown per test result"),
-            ("✦","Quick Switch","Change model from Analyse sidebar"),
+            ("◈","Vertex AI",         "Steps 4+5 use enterprise Vertex AI SDK"),
+            ("🔵","Gemini Primary",    "gemini-1.5-flash — Steps 0–3"),
+            ("🟠","Groq Fallback",     "7 Groq models incl. DeepSeek R1"),
+            ("⊕","Model Selector",    "Full model picker with live switching"),
+            ("✦","3-Tier Fallback",   "Vertex → Gemini → Groq auto-chain"),
+            ("◈","Pre-Decision Scan", "Scans characteristics before analysis"),
+            ("◈","Fairness Audit",    "Counterfactual parity across demographics"),
+            ("◈","Explainability",    "Phrase-level AI governance trace"),
+            ("◈","Fairness Metrics",  "Aggregate governance dashboard + trend"),
+            ("◎","Sample Dataset",    "10 realistic decisions for batch demo"),
+            ("⊞","Batch Audit",       "Multi-decision governance pipeline"),
+            ("⊘","Test Suite",        "90% accuracy, fail-first results"),
         ]:
             st.markdown(
                 f'<div class="feat-row">'
@@ -2153,18 +2185,19 @@ elif view == "settings":
 # ─────────────────────────────────────────────────────
 elif view == "about":
     st.markdown('<div class="ph">About Verdict Watch</div>', unsafe_allow_html=True)
-    st.markdown('<div class="ps">Enterprise AI bias detection. V15 — AI Governance Edition. Gemini PRIMARY · Groq FALLBACK.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ps">Enterprise AI governance. V16 — Vertex AI + Gemini + Groq. Google PRIMARY · Full governance pipeline.</div>', unsafe_allow_html=True)
 
     ab1, ab2 = st.columns([1.6,1], gap="large")
     with ab1:
         st.markdown(
             '<div class="card" style="background:var(--surf2);margin-bottom:12px;">'
             '<div style="font-family:var(--ff-d);font-size:1.1rem;color:var(--t1);margin-bottom:6px;">What is Verdict Watch?</div>'
-            '<div style="font-size:.82rem;color:var(--t2);line-height:1.75;">A 5-step AI governance pipeline using Google Gemini (primary) with Groq fallback — '
-            'pre-scanning decisions for protected characteristics, extracting decision criteria, '
-            'detecting discriminatory patterns across 7 bias dimensions, running a counterfactual fairness audit, '
-            'generating an explainability trace with phrase-level reasoning, citing relevant laws, '
-            'and producing the fair outcome the applicant deserved.</div></div>',
+            '<div style="font-size:.82rem;color:var(--t2);line-height:1.75;">A 6-step AI governance pipeline. Steps 0–3 run on Google Gemini. '
+            'Steps 4–5 (Fairness Audit + Explainability Trace) run on Vertex AI — Google\'s enterprise AI platform. '
+            'Groq provides automatic fallback across all steps. '
+            'The pipeline detects bias, audits fairness with counterfactual parity testing, '
+            'generates a phrase-level explainability trace, cites applicable laws, '
+            'and produces the fair outcome the applicant deserved.</div></div>',
             unsafe_allow_html=True)
 
         st.markdown('<div class="lbl">AI Models Available</div>', unsafe_allow_html=True)
@@ -2225,5 +2258,5 @@ elif view == "about":
             unsafe_allow_html=True)
         st.markdown(
             '<div style="text-align:center;font-size:.68rem;color:var(--t3);margin-top:12px;">'
-            'Verdict Watch V15 · AI Governance Edition · Gemini PRIMARY + Groq FALLBACK</div>',
+            'Verdict Watch V16 · AI Governance Edition · Vertex AI + Gemini + Groq</div>',
             unsafe_allow_html=True)

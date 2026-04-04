@@ -1,9 +1,9 @@
-# ⚖️ Verdict Watch V15 — AI Governance Edition
+# ⚖️ Verdict Watch V16 — AI Governance Edition
 
 **AI-powered bias detection and governance for automated decisions.**  
-Paste any rejection letter, loan denial, medical triage, or university rejection — Verdict Watch runs a full 5-step AI governance pipeline to detect bias, audit fairness, generate an explainability trace, and produce the fair outcome the applicant deserved.
+Paste any rejection letter, loan denial, medical triage, or university rejection — Verdict Watch runs a full 6-step AI governance pipeline to detect bias, audit fairness, generate an explainability trace, and produce the fair outcome the applicant deserved.
 
-> Built for **Solution Challenge 2026 — Unbiased AI Decision** · Powered by **Google Gemini**
+> Built for **Solution Challenge 2026 — Unbiased AI Decision** · Powered by **Google Gemini + Vertex AI**
 
 ---
 
@@ -17,7 +17,7 @@ pip install -r requirements.txt
 
 # 2. Add your API keys
 cp env.example .env
-# Edit .env — add GEMINI_API_KEY and GROQ_API_KEY
+# Edit .env — add GEMINI_API_KEY, GROQ_API_KEY, GOOGLE_CLOUD_PROJECT
 
 # 3. Start the API (Terminal 1)
 uvicorn api:app --reload
@@ -30,31 +30,31 @@ Open **http://localhost:8501** in your browser.
 
 ---
 
-## The 5-Step AI Governance Pipeline
+## The 6-Step AI Governance Pipeline
 
 ```
 Decision text input
       ↓
-STEP 0 — Pre-decision scan
+STEP 0 — Pre-decision scan  [Gemini]
   → Which protected characteristics are present?
   → Assign influence weights (0–100%) to each
       ↓
-STEP 1 — Criteria extraction
+STEP 1 — Criteria extraction  [Gemini]
   → What factors drove this decision?
       ↓
-STEP 2 — Bias detection (7 dimensions)
+STEP 2 — Bias detection — 7 dimensions  [Gemini]
   → Gender, Age, Racial, Geographic, Socioeconomic, Language, Insurance
       ↓
-STEP 3 — Fair outcome + legal frameworks
+STEP 3 — Fair outcome + legal frameworks  [Gemini]
   → What should the outcome have been?
   → Which laws were violated? (Title VII, Fair Housing Act, ADEA…)
       ↓
-STEP 4 — Fairness audit (counterfactual parity)
-  → Would this decision have changed for a different gender/age/name?
+STEP 4 — Fairness audit — counterfactual parity  [Vertex AI]
+  → Would this decision have changed for a different gender / age / name?
   → Demographic parity score per characteristic (0–100)
   → Overall fairness score + verdict
       ↓
-STEP 5 — Explainability trace
+STEP 5 — Explainability trace  [Vertex AI]
   → Phrase-by-phrase reasoning chain
   → Each phrase mapped to the characteristic it triggers and the law it violates
   → Retroactive correction: how to fix this specific decision now
@@ -62,31 +62,36 @@ STEP 5 — Explainability trace
 Full report: bias verdict, fairness score, appeal letter, next steps
 ```
 
+Steps 4 and 5 use **Vertex AI** (Google's enterprise AI SDK). All steps fall back to Groq automatically if any Google service is unavailable.
+
 ---
 
-## What's New in V15 (AI Governance Edition)
+## What's in V16
 
 | Feature | Details |
 |---|---|
-| ◈ **Pre-decision scan** | Scans decision text before analysis — identifies which protected characteristics are present and how strongly each influenced the decision |
-| ◈ **Fairness Audit** | Counterfactual parity testing across demographics — overall fairness score (0–100) with demographic breakdown |
-| ◈ **Explainability Trace** | Phrase-level reasoning chain — every biased phrase mapped to the characteristic it triggers and the law it violates |
-| ◈ **Retroactive Correction** | Specific, actionable correction for the exact decision analysed |
-| ◈ **Fairness Metrics Dashboard** | Aggregate governance view across all past decisions — parity scores, verdict distribution, characteristic weights |
-| ◈ **Governance API** | New endpoints: `/api/fairness`, `/api/audit/batch`, `/api/governance/report` |
-| ◈ **Cloud Run ready** | Dockerfile + cloudbuild.yaml for one-command Google Cloud Run deployment |
+| ◈ **Vertex AI governance** | Steps 4+5 run on `google-cloud-aiplatform` — enterprise Google AI stack |
+| ◈ **Pre-decision scan** | Scans text before analysis — identifies protected characteristics and influence weights |
+| ◈ **Fairness audit** | Counterfactual parity testing — overall fairness score (0–100) with per-characteristic breakdown |
+| ◈ **Explainability trace** | Phrase-level reasoning chain — every biased phrase mapped to characteristic + law violated |
+| ◈ **Retroactive correction** | Specific, actionable correction for the exact decision analysed |
+| ◈ **Fairness Metrics dashboard** | Aggregate governance view — parity scores, verdict distribution, trend, severity breakdown |
+| ◈ **Sample dataset** | 10 realistic past decisions as CSV — download and run batch audit live in demo |
+| ◈ **3-tier fallback** | Vertex AI → Gemini API → Groq — auto-fallback at every step |
+| ◈ **Governance API** | `/api/fairness`, `/api/audit/batch`, `/api/governance/report`, `/api/sample-dataset` |
+| ◈ **Cloud Run deployment** | Vertex AI activates automatically when deployed — no extra keys needed |
 
 ---
 
 ## AI Governance Layer
 
-The core of V15 is the AI governance layer — the combination of Steps 0, 4, and 5:
+The governance layer is the combination of Steps 0, 4, and 5:
 
-- **Pre-model data audit** (Step 0): Before any decision is made, identify which protected characteristics are embedded in the decision text and how heavily they were weighted. This answers: *was the data itself biased?*
+**Pre-model data audit (Step 0)** — Before any decision is made, identify which protected characteristics are embedded in the decision text and how heavily each was weighted. This answers: *was the data itself biased?*
 
-- **Post-decision audit** (Steps 4+5): After the decision, run counterfactual fairness testing and generate an explainability trace. This answers: *was this specific decision applied fairly, and can we prove it?*
+**Post-decision audit (Steps 4+5)** — After the decision, run counterfactual fairness testing via Vertex AI and generate a phrase-level explainability trace. This answers: *was this specific decision applied fairly, and can we prove it — phrase by phrase?*
 
-- **Retroactive correction**: Every report includes a specific correction for the exact decision — not just "this was biased" but "here is what should have happened and how to fix it now."
+**Retroactive correction** — Every report includes a specific correction for the exact decision analysed, plus the legal frameworks that were violated and three actionable next steps for the affected person.
 
 ---
 
@@ -94,12 +99,12 @@ The core of V15 is the AI governance layer — the combination of Steps 0, 4, an
 
 | File | Purpose |
 |---|---|
-| `requirements.txt` | Python dependencies |
-| `services.py` | DB models + 5-step Gemini pipeline + V15 governance |
-| `api.py` | FastAPI REST endpoints incl. governance layer |
-| `streamlit_app.py` | Full Streamlit UI — governance panels + Fairness Metrics |
+| `requirements.txt` | Python dependencies including `google-cloud-aiplatform` |
+| `services.py` | DB models + 6-step pipeline — Gemini (Steps 0–3) + Vertex AI (Steps 4–5) |
+| `api.py` | FastAPI REST endpoints — analysis, governance, sample dataset |
+| `streamlit_app.py` | Full Streamlit UI — governance panels, Fairness Metrics, Vertex AI badge |
 | `Dockerfile` | Container for Google Cloud Run |
-| `cloudbuild.yaml` | Google Cloud Build + Cloud Run deployment pipeline |
+| `cloudbuild.yaml` | One-command Google Cloud Build + Cloud Run deployment |
 | `env.example` | Environment variable template |
 | `DEMO_SCRIPT.txt` | 3-minute demo script for submission video |
 
@@ -109,15 +114,16 @@ The core of V15 is the AI governance layer — the combination of Steps 0, 4, an
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/analyse` | Run full 5-step governance pipeline |
-| GET | `/api/fairness` | Aggregate fairness metrics across all reports |
-| GET | `/api/fairness/{id}` | Fairness audit for a single report |
-| POST | `/api/audit/batch` | Batch fairness audit on multiple decisions |
-| GET | `/api/governance/report` | Full governance summary for presentation |
+| POST | `/api/analyse` | Run full 6-step governance pipeline |
+| GET | `/api/fairness` | Aggregate fairness metrics + trend across all reports |
+| GET | `/api/fairness/{id}` | Fairness audit data for a single report |
+| POST | `/api/audit/batch` | Batch governance audit on up to 10 decisions |
+| GET | `/api/sample-dataset` | Download 10 sample decisions as CSV |
+| GET | `/api/governance/report` | Full AI governance summary |
 | GET | `/api/reports` | All past reports |
-| GET | `/api/reports/{id}` | Single report |
-| GET | `/api/providers` | AI provider health check |
-| GET | `/api/health` | Health check |
+| GET | `/api/reports/{id}` | Single report with full governance data |
+| GET | `/api/providers` | Vertex AI / Gemini / Groq provider status |
+| GET | `/api/health` | Health check — shows `vertex_ai: true` when enabled |
 
 ---
 
@@ -125,9 +131,12 @@ The core of V15 is the AI governance layer — the combination of Steps 0, 4, an
 
 ```bash
 # One command — deploys to Mumbai region (asia-south1)
+# GOOGLE_CLOUD_PROJECT is injected automatically, enabling Vertex AI
 gcloud builds submit --config cloudbuild.yaml \
   --substitutions=_GEMINI_API_KEY="your_key",_GROQ_API_KEY="your_key"
 ```
+
+Vertex AI activates automatically inside Cloud Run — no extra API key needed beyond your GCP project ID.
 
 ---
 
@@ -135,25 +144,28 @@ gcloud builds submit --config cloudbuild.yaml \
 
 | Dimension | What it looks for |
 |---|---|
-| Gender | Gender, name, parental status |
-| Age | Age group, generational terms |
-| Racial / Ethnic | Name-based origin proxies, nationality |
-| Geographic | Zip code, postcode, residential area as proxy |
-| Socioeconomic | Employment sector, occupation, income class |
+| Gender | Gender, name, parental status references |
+| Age | Age group, generational terms, seniority proxies |
+| Racial / Ethnic | Name-based origin proxies, nationality, ethnicity |
+| Geographic | Zip code, postcode, residential area as discriminatory proxy |
+| Socioeconomic | Employment sector, occupation category, income class |
 | Language | Primary language used against applicants |
-| Insurance | Insurance tier or classification as proxy |
+| Insurance | Insurance tier or classification used as risk proxy |
 
 ---
 
 ## Tech Stack
 
-- **Google Gemini** — Primary AI (all 5 pipeline steps)
-- **Groq / Llama 3.3 70B** — Fallback AI
-- **FastAPI** — REST API
-- **Streamlit** — Web UI
-- **SQLAlchemy + SQLite** — Zero-config database
-- **Google Cloud Run** — Deployment
-- **Plotly** — Interactive charts
+| Component | Role |
+|---|---|
+| **Google Vertex AI** | Enterprise AI — Fairness Audit + Explainability Trace (Steps 4–5) |
+| **Google Gemini** | Primary AI — Pre-scan, Extraction, Detection, Fair Outcome (Steps 0–3) |
+| **Groq / Llama 3.3 70B** | Fallback AI — all steps |
+| **FastAPI** | REST API |
+| **Streamlit** | Web UI |
+| **SQLAlchemy + SQLite** | Zero-config database |
+| **Google Cloud Run** | Deployment |
+| **Plotly** | Interactive charts |
 
 ---
 
