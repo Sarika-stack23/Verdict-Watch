@@ -115,7 +115,7 @@ def init_db() -> None:
                     log.info("Migration: added %s.%s", table, col)
             except Exception as exc:
                 log.warning("Migration skipped (%s.%s): %s", table, col, exc)
-    log.info("Database ready (V15).")
+    log.info("Database ready (V16).")
 
 
 def get_db() -> Session:
@@ -344,10 +344,6 @@ def _call_groq_text(messages: list[dict], label: str) -> str:
 
 
 # ─────────────────────────────────────────────
-# UNIFIED AI CALL
-# ─────────────────────────────────────────────
-
-# ─────────────────────────────────────────────
 # UNIFIED AI CALL — 3-tier: Vertex AI → Gemini → Groq
 # ─────────────────────────────────────────────
 
@@ -401,7 +397,7 @@ def _ai_call_text(gemini_prompt, groq_messages, label, provider=PROVIDER_GEMINI,
 
 
 # ═════════════════════════════════════════════════════
-# STEP 0 — PRE-DECISION CHARACTERISTIC SCAN  (NEW V15)
+# STEP 0 — PRE-DECISION CHARACTERISTIC SCAN
 # ═════════════════════════════════════════════════════
 
 _SCAN_INSTRUCTION = (
@@ -514,7 +510,7 @@ def generate_fair_outcome(extracted, bias_result, provider=PROVIDER_GEMINI):
 
 
 # ═════════════════════════════════════════════════════
-# STEP 4 — FAIRNESS AUDIT: COUNTERFACTUAL PARITY (NEW V15)
+# STEP 4 — FAIRNESS AUDIT: COUNTERFACTUAL PARITY  [Vertex AI]
 # ═════════════════════════════════════════════════════
 
 _FAIRNESS_AUDIT_INSTRUCTION = (
@@ -556,7 +552,7 @@ def run_fairness_audit(
 
 
 # ═════════════════════════════════════════════════════
-# STEP 5 — EXPLAINABILITY TRACE (NEW V15)
+# STEP 5 — EXPLAINABILITY TRACE  [Vertex AI]
 # ═════════════════════════════════════════════════════
 
 _EXPLAIN_INSTRUCTION = (
@@ -658,7 +654,7 @@ def quick_scan(decision_text, decision_type, provider=PROVIDER_GEMINI):
 
 
 # ═════════════════════════════════════════════════════
-# FULL PIPELINE (V15 — 5 steps)
+# FULL PIPELINE (V16 — 6 steps)
 # ═════════════════════════════════════════════════════
 
 def run_full_pipeline(
@@ -759,7 +755,7 @@ def run_full_pipeline(
         )
         db.add(report); db.commit(); db.refresh(report)
 
-        log.info("V15 pipeline complete — id=%s bias=%s fairness=%s total=%dms provider=%s",
+        log.info("V16 pipeline complete — id=%s bias=%s fairness=%s total=%dms provider=%s",
                  report.id, report.bias_found,
                  fairness_data.get("overall_fairness_score", "N/A"),
                  timing["total"], prov_used)
@@ -813,7 +809,7 @@ def generate_appeal_letter(report, decision_text, decision_type, provider=PROVID
 
 
 # ─────────────────────────────────────────────
-# MODEL BIAS REPORT (NEW V15)
+# SAMPLE DATASET + MODEL BIAS REPORT
 # ─────────────────────────────────────────────
 
 def generate_sample_dataset() -> str:

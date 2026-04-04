@@ -1,4 +1,4 @@
-# ⚖️ Verdict Watch V16 — AI Governance Edition
+# ⚖️ Verdict Watch — AI Governance Edition
 
 **AI-powered bias detection and governance for automated decisions.**  
 Paste any rejection letter, loan denial, medical triage, or university rejection — Verdict Watch runs a full 6-step AI governance pipeline to detect bias, audit fairness, generate an explainability trace, and produce the fair outcome the applicant deserved.
@@ -66,7 +66,7 @@ Steps 4 and 5 use **Vertex AI** (Google's enterprise AI SDK). All steps fall bac
 
 ---
 
-## What's in V16
+## Features
 
 | Feature | Details |
 |---|---|
@@ -85,7 +85,7 @@ Steps 4 and 5 use **Vertex AI** (Google's enterprise AI SDK). All steps fall bac
 
 ## AI Governance Layer
 
-The governance layer is the combination of Steps 0, 4, and 5:
+The governance layer combines Steps 0, 4, and 5:
 
 **Pre-model data audit (Step 0)** — Before any decision is made, identify which protected characteristics are embedded in the decision text and how heavily each was weighted. This answers: *was the data itself biased?*
 

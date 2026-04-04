@@ -1,33 +1,10 @@
 """
-streamlit_app.py — Verdict Watch V14 FIXED (UI/UX Pass)
+streamlit_app.py — Verdict Watch V16 — AI Governance Edition
 
-All issues resolved in one pass:
-  VISUAL
-  - Page/section headings no longer clip (overflow visible, proper z-index)
-  - Groq amber banner: higher contrast text (#1a0e00 on amber bg)
-  - DECISION TEXT / TYPE labels: brighter, more visible
-  - Quick Switch panel: proper card border wrapping on all sides
-  - Sidebar active model text: higher opacity, readable
-  - Dashboard "Top Bias" metric: truncate with ellipsis via CSS, no mid-word clip
-  - Donut % labels removed from inside ring (overlap fix); legend carries them
-  - Provider bar: min 4px segment even at 0% so bar always has two visible segments
-  - About page: Insurance Classification row was cut off — now shown
-
-  UX
-  - dtype_sel widget key conflict / Streamlit warning: hidden via CSS + key isolated
-  - Sidebar session counter: added tooltip label "This session / All time"
-  - Upload File radio: unselected state contrast improved
-  - Side-by-side compare toggle: wrapped in card with label context
-  - Signals chips: fixed position — always below textarea, above Run button
-  - History expander titles: two-line readable format with key info
-  - Test Suite: FAIL tests pinned first in results list, pass tests collapsed below
-  - Batch "Session 0 ·" — was showing raw 0 placeholder; now shows live count
-
-  LAYOUT
-  - Char counter: moved inline below textarea, no longer drifts to TYPE col
-  - Model Selector "Use" button: column ratio fixed (3:1 not 4:1), less whitespace gap
-  - Sidebar Quick Examples: word-boundary truncation at 22 chars (tighter)
-  - "Go to Analyse" CTA: margin-top added for breathing room
+V16 — AI Governance Edition
+  - 6-step pipeline: Gemini (Steps 0–3) + Vertex AI (Steps 4–5) + Groq fallback
+  - Fairness audit, explainability trace, characteristic weights, fairness metrics dashboard
+  - Sample dataset CSV, Vertex AI badge, 3-tier provider chain
 """
 
 import streamlit as st
@@ -557,7 +534,7 @@ def txt_report(report, text, dtype):
     ]
     if laws: lines += ["","── LEGAL FRAMEWORKS ───────────────────────────────────────"] + [f"  • {l}" for l in laws]
     if tm:   lines += ["","── TIMING ─────────────────────────────────────────────────"] + [f"  {k}: {v}ms" for k,v in tm.items()]
-    lines += ["","="*64,"  Verdict Watch V14  ·  Not legal advice","="*64]
+    lines += ["","="*64,"  Verdict Watch V16  ·  Not legal advice","="*64]
     return "\n".join(lines)
 
 def to_csv(reps):
@@ -712,7 +689,7 @@ def chart_gauge(val, bias):
 # ══════════════════════════════════════════════════════
 
 def _render_steps(ph, current, label):
-    # V15: 6 steps including governance layer
+    # V16: 6 steps — Gemini (0-3) + Vertex AI (4-5)
     steps = [(0,"SCAN"),(1,"EXTRACT"),(2,"DETECT"),(3,"GENERATE"),(4,"FAIRNESS"),(5,"EXPLAIN")]
     parts = []
     for num, lbl in steps:
@@ -859,7 +836,7 @@ def render_result(report, dt, dtype, compact=False):
                     f'<div class="rec"><div class="rec-n">{i}</div><div class="rec-t">{rec}</div></div>',
                     unsafe_allow_html=True)
 
-        # ── V15: FAIRNESS AUDIT PANEL ──────────────────────────────
+        # ── FAIRNESS AUDIT PANEL ──────────────────────────────
         fairness = report.get("fairness_scores", {})
         if fairness and isinstance(fairness, dict) and "overall_fairness_score" in fairness:
             st.markdown('<hr class="div">', unsafe_allow_html=True)
@@ -938,7 +915,7 @@ def render_result(report, dt, dtype, compact=False):
                         f'</div>',
                         unsafe_allow_html=True)
 
-        # ── V15: EXPLAINABILITY TRACE ──────────────────────────────
+        # ── EXPLAINABILITY TRACE ──────────────────────────────
         explain = report.get("explainability_trace", {})
         if explain and isinstance(explain, dict) and explain.get("reasoning_chain"):
             st.markdown('<hr class="div">', unsafe_allow_html=True)
@@ -987,7 +964,7 @@ def render_result(report, dt, dtype, compact=False):
                     f'<div class="card-val" style="font-size:.82rem;">{correct}</div></div>',
                     unsafe_allow_html=True)
 
-        # ── V15: CHARACTERISTIC WEIGHT CHART ───────────────────────
+        # ── CHARACTERISTIC WEIGHT CHART ───────────────────────
         cw = report.get("characteristic_weights", {})
         if cw and isinstance(cw, dict) and len(cw) > 0:
             st.markdown('<hr class="div">', unsafe_allow_html=True)
@@ -1503,11 +1480,11 @@ elif view == "analyse":
         dl1, dl2 = st.columns(2)
         with dl1:
             st.download_button("↓ Full Report (.txt)", data=txt_report(report,dt,dtype_),
-                file_name=f"verdict_v14_{(report.get('id') or 'r')[:8]}.txt",
+                file_name=f"verdict_v16_{(report.get('id') or 'r')[:8]}.txt",
                 mime="text/plain", key="dl_rpt")
         with dl2:
             st.download_button("↓ CSV", data=to_csv([report]),
-                file_name=f"verdict_v14_{(report.get('id') or 'r')[:8]}.csv",
+                file_name=f"verdict_v16_{(report.get('id') or 'r')[:8]}.csv",
                 mime="text/csv", key="dl_csv_single")
 
 # ─────────────────────────────────────────────────────
@@ -1692,7 +1669,7 @@ elif view == "history":
                     mime="text/plain", key=f"dl_{r.get('id','x')}")
 
 # ─────────────────────────────────────────────────────
-# FAIRNESS METRICS VIEW (NEW V15)
+# FAIRNESS METRICS VIEW
 # ─────────────────────────────────────────────────────
 elif view == "fairness":
     st.markdown('<div class="ph">Fairness Metrics</div>', unsafe_allow_html=True)

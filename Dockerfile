@@ -1,4 +1,4 @@
-# Verdict Watch V15 — Dockerfile for Google Cloud Run
+# Verdict Watch V16 — Dockerfile for Google Cloud Run
 # Deploys the Streamlit UI. FastAPI runs as a separate service if needed.
 
 FROM python:3.11-slim
