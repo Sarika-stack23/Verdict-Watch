@@ -169,5 +169,34 @@ Vertex AI activates automatically inside Cloud Run — no extra API key needed b
 
 ---
 
+## Challenges We Faced
+
+**Challenge: Gemini API returning malformed JSON under load**
+
+During development, we found that Gemini's `gemini-1.5-flash` would occasionally return responses wrapped in markdown code fences (` ```json `) instead of clean JSON, especially when prompts were long. This caused silent parse failures that were hard to debug.
+
+**How we solved it:** We built a response sanitiser that strips markdown fences before parsing, combined with a 3-attempt retry loop with exponential backoff. When all Gemini retries fail, the pipeline automatically falls back to Groq (Llama 3.3 70B), which has more consistent JSON output. This dual-provider architecture turned a reliability problem into a resilience feature — the app now handles API failures gracefully without the user ever seeing an error.
+
+**Technical decision:** We separated the AI provider layer (`_ai_call_json`, `_ai_call_text`) from the pipeline steps so each step can independently choose Gemini, Vertex AI, or Groq. This made the 3-tier fallback chain (Vertex AI → Gemini → Groq) easy to implement and test.
+
+---
+
+## Future Plans
+
+The current build is a working MVP. Here is how we plan to scale it to a larger audience:
+
+| Phase | Plan |
+|---|---|
+| **Mobile app** | Flutter app so individuals can scan rejection letters from their phone camera and get instant bias analysis |
+| **Organisation dashboard** | Multi-user portal for HR teams, banks, and hospitals to audit their AI decision systems at scale across thousands of decisions |
+| **Real dataset integration** | Connect to live HR and loan datasets (with consent) to detect systemic bias patterns across an organisation's historical decisions, not just individual cases |
+| **Multi-language support** | Extend bias detection to Hindi, Tamil, and other Indian languages so the tool is accessible to non-English speakers affected by automated decisions |
+| **Legal integration** | Partner with legal aid organisations to automatically route high-confidence bias cases to pro bono lawyers with the appeal letter pre-generated |
+| **Regulatory reporting** | Generate compliance reports in the format required by India's upcoming Digital Personal Data Protection Act and EU AI Act |
+
+The API-first architecture (FastAPI + REST) and Cloud Run deployment mean the core engine can be embedded into any existing HR, banking, or healthcare platform with minimal integration effort.
+
+---
+
 *Not legal advice. Built for educational awareness and AI governance research.*  
 *Solution Challenge 2026 · Build with AI · Unbiased AI Decision*
