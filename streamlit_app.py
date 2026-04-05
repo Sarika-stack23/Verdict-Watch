@@ -39,9 +39,9 @@ st.set_page_config(
 # ══════════════════════════════════════════════════════
 
 GEMINI_MODELS = {
-    "gemini-2.0-flash":         "Gemini 2.0 Flash · Fastest, great accuracy",
+    "gemini-2.0-flash":         "Gemini 2.0 Flash · Fastest ✦ Recommended",
     "gemini-2.0-flash-lite":    "Gemini 2.0 Flash Lite · Ultra fast, low cost",
-    "gemini-1.5-flash":         "Gemini 1.5 Flash · Balanced ✦ Recommended",
+    "gemini-1.5-flash":         "Gemini 1.5 Flash · Balanced",
     "gemini-1.5-flash-8b":      "Gemini 1.5 Flash 8B · Lightweight",
     "gemini-1.5-pro":           "Gemini 1.5 Pro · Most capable Gemini",
     "gemini-2.5-pro-preview":   "Gemini 2.5 Pro Preview · Cutting edge",
@@ -388,7 +388,7 @@ _DEFS = {
     "view":"analyse","session_count":0,"last_report":None,
     "last_text":"","last_dtype":"job","appeal_letter":None,
     "decision_input":"","scan_mode":"full",
-    "ai_provider":"gemini","ai_model":"gemini-1.5-flash",
+    "ai_provider":"gemini","ai_model":"gemini-2.0-flash",
     "force_rerun":False,"fb_comment":"","cmp_ra":None,"cmp_rb":None,
     "gemini_test_result":None,"groq_test_result":None,"vertex_test_result":None,
 }
@@ -417,7 +417,7 @@ def current_provider():
     return st.session_state.get("ai_provider","gemini")
 
 def current_model():
-    return st.session_state.get("ai_model","gemini-1.5-flash")
+    return st.session_state.get("ai_model","gemini-2.0-flash")
 
 def provider_label(p):
     return "🔵 Gemini" if p == "gemini" else "🟠 Groq"
@@ -1006,7 +1006,7 @@ with st.sidebar:
     )
 
     cur_prov  = st.session_state.get("ai_provider","gemini")
-    cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
+    cur_model = st.session_state.get("ai_model","gemini-2.0-flash")
     # FIX: sidebar model display — more readable, higher contrast
     mdl_short = _trunc(
         cur_model.replace("gemini-","G·").replace("llama-","L·")
@@ -1087,7 +1087,7 @@ if view == "models":
         if st.button("Select Gemini", key="sel_gemini", use_container_width=True):
             st.session_state["ai_provider"] = "gemini"
             if st.session_state.get("ai_model","") not in GEMINI_MODELS:
-                st.session_state["ai_model"] = "gemini-1.5-flash"
+                st.session_state["ai_model"] = "gemini-2.0-flash"
             st.rerun()
 
     with prov_col2:
@@ -1109,7 +1109,7 @@ if view == "models":
 
     st.markdown("<br>", unsafe_allow_html=True)
     current_prov = st.session_state.get("ai_provider","gemini")
-    current_mdl  = st.session_state.get("ai_model","gemini-1.5-flash")
+    current_mdl  = st.session_state.get("ai_model","gemini-2.0-flash")
 
     if current_prov == "gemini":
         st.markdown('<div class="lbl">🔵 Available Gemini Models</div>', unsafe_allow_html=True)
@@ -1200,7 +1200,7 @@ elif view == "analyse":
         st.markdown('<div class="key-err">⚠ No API key found. Add GEMINI_API_KEY or GROQ_API_KEY to .env and restart.</div>', unsafe_allow_html=True)
 
     cur_prov       = st.session_state.get("ai_provider","gemini")
-    cur_model      = st.session_state.get("ai_model","gemini-1.5-flash")
+    cur_model      = st.session_state.get("ai_model","gemini-2.0-flash")
     prov_available = (gem_status if cur_prov=="gemini" else groq_status)
     banner_cls     = "" if cur_prov=="gemini" else "groq-banner"
     key_miss       = "" if prov_available else ' <span style="color:var(--red);font-size:.7rem;font-weight:600;">⚠ Key missing</span>'
@@ -1320,7 +1320,7 @@ elif view == "analyse":
             unsafe_allow_html=True)
 
         quick_models = {
-            "gemini": ["gemini-1.5-flash","gemini-2.0-flash","gemini-1.5-pro"],
+            "gemini": ["gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"],
             "groq":   ["llama-3.3-70b-versatile","llama-3.1-8b-instant","mixtral-8x7b-32768"],
         }
         for p, models in quick_models.items():
@@ -1373,7 +1373,7 @@ elif view == "analyse":
                     report, err = run_analysis(
                         dt, dtype, mode=scan_mode,
                         provider=st.session_state.get("ai_provider","gemini"),
-                        model=st.session_state.get("ai_model","gemini-1.5-flash"))
+                        model=st.session_state.get("ai_model","gemini-2.0-flash"))
 
             if err:
                 st.error(f"❌ {err}")
@@ -1391,7 +1391,7 @@ elif view == "analyse":
                             dt2, st.session_state.get("dtype_b","other"),
                             mode=scan_mode,
                             provider=st.session_state.get("ai_provider","gemini"),
-                            model=st.session_state.get("ai_model","gemini-1.5-flash"))
+                            model=st.session_state.get("ai_model","gemini-2.0-flash"))
                     if eb: st.error(f"Decision B error: {eb}")
                     else:
                         st.session_state["cmp_ra"] = report
@@ -1811,7 +1811,7 @@ elif view == "batch":
         st.markdown('<div class="key-err">⚠ API key missing — see Settings.</div>', unsafe_allow_html=True)
 
     cur_prov  = st.session_state.get("ai_provider","gemini")
-    cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
+    cur_model = st.session_state.get("ai_model","gemini-2.0-flash")
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">'
         f'<span style="font-size:.72rem;color:var(--t3);">Using:</span>'
@@ -1876,7 +1876,7 @@ elif view == "batch":
                     unsafe_allow_html=True)
                 rep, err = run_analysis(blk, btype, mode=scan_b,
                                         provider=st.session_state.get("ai_provider","gemini"),
-                                        model=st.session_state.get("ai_model","gemini-1.5-flash"))
+                                        model=st.session_state.get("ai_model","gemini-2.0-flash"))
                 results.append({"text":blk,"report":rep,"error":err})
                 prog.progress((i+1)/len(blocks))
             prog.empty(); status.empty()
@@ -1918,7 +1918,7 @@ elif view == "test":
     st.markdown('<div class="ps">Run all built-in examples in one click. Each test has an expected outcome — pass means the model agrees.</div>', unsafe_allow_html=True)
 
     cur_prov  = st.session_state.get("ai_provider","gemini")
-    cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
+    cur_model = st.session_state.get("ai_model","gemini-2.0-flash")
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">'
         f'<span style="font-size:.72rem;color:var(--t3);">Model for Tests:</span>'
@@ -2092,7 +2092,7 @@ elif view == "settings":
                     try:
                         import google.generativeai as genai
                         genai.configure(api_key=os.getenv("GEMINI_API_KEY",""))
-                        m = genai.GenerativeModel("gemini-1.5-flash")
+                        m = genai.GenerativeModel("gemini-2.0-flash")
                         m.generate_content("ping", generation_config={"max_output_tokens":5})
                         st.session_state["gemini_test_result"] = ("ok","✓ Gemini connected successfully")
                     except Exception as e:
@@ -2120,7 +2120,7 @@ elif view == "settings":
     with sc2:
         st.markdown('<div class="lbl">Active Configuration</div>', unsafe_allow_html=True)
         cur_prov  = st.session_state.get("ai_provider","gemini")
-        cur_model = st.session_state.get("ai_model","gemini-1.5-flash")
+        cur_model = st.session_state.get("ai_model","gemini-2.0-flash")
         all_r     = all_reports()
         fb        = services.get_feedback_stats()
         db_url    = os.getenv("DATABASE_URL","sqlite:///verdict_watch.db")
@@ -2139,7 +2139,7 @@ elif view == "settings":
         st.markdown('<div class="lbl" style="margin-top:14px;">V16 Features</div>', unsafe_allow_html=True)
         for ico, name, desc in [
             ("◈","Vertex AI",         "Steps 4+5 use enterprise Vertex AI SDK"),
-            ("🔵","Gemini Primary",    "gemini-1.5-flash — Steps 0–3"),
+            ("🔵","Gemini Primary",    "gemini-2.0-flash — Steps 0–3"),
             ("🟠","Groq Fallback",     "7 Groq models incl. DeepSeek R1"),
             ("⊕","Model Selector",    "Full model picker with live switching"),
             ("✦","3-Tier Fallback",   "Vertex → Gemini → Groq auto-chain"),

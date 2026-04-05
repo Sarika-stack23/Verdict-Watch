@@ -152,8 +152,8 @@ def find_duplicate(text_hash: str) -> Optional[dict]:
 # AI PROVIDER CONSTANTS
 # ─────────────────────────────────────────────
 
-_GEMINI_MODEL  = "gemini-1.5-flash"
-_VERTEX_MODEL  = "gemini-1.5-flash"   # same model, different SDK (Vertex AI)
+_GEMINI_MODEL  = "gemini-2.0-flash"
+_VERTEX_MODEL  = "gemini-2.0-flash"   # same model, different SDK (Vertex AI)
 _GROQ_MODEL    = "llama-3.3-70b-versatile"
 _MAX_RETRIES   = 3
 _RETRY_DELAY   = 1.5
